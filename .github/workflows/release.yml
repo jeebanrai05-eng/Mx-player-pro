@@ -20,7 +20,7 @@ on:
 
 jobs:
   build-release:
-    name: Build & Upload Release APK
+    name: Build & Publish Release APK
     runs-on: ubuntu-latest
 
     permissions:
@@ -37,58 +37,131 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11'
+
+      # Validate Required Repository Secrets
+      - name: Validate GitHub Secrets
+        run: |
+          MISSING_SECRETS=""
+          if [ -z "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            MISSING_SECRETS="${MISSING_SECRETS} RELEASE_KEYSTORE_BASE64"
+          fi
+          if [ -z "${{ secrets.RELEASE_STORE_PASSWORD }}" ]; then
+            MISSING_SECRETS="${MISSING_SECRETS} RELEASE_STORE_PASSWORD"
+          fi
+          if [ -z "${{ secrets.RELEASE_KEY_ALIAS }}" ]; then
+            MISSING_SECRETS="${MISSING_SECRETS} RELEASE_KEY_ALIAS"
+          fi
+          if [ -z "${{ secrets.RELEASE_KEY_PASSWORD }}" ]; then
+            MISSING_SECRETS="${MISSING_SECRETS} RELEASE_KEY_PASSWORD"
+          fi
+
+          if [ -n "$MISSING_SECRETS" ]; then
+            echo "::error::Missing required repository secret(s):$MISSING_SECRETS"
+            echo "Please go to: Repository Settings -> Secrets and variables -> Actions and add these secrets."
+            exit 1
+          fi
+          echo "All 4 required release secrets are configured."
 
       # Decode Base64 Keystore from GitHub Secret
       - name: Decode Release Keystore
         run: |
-          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
-            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "${{ github.workspace }}/my-upload-key.jks"
-            echo "Keystore successfully decoded to ${{ github.workspace }}/my-upload-key.jks"
-          else
-            echo "Error: RELEASE_KEYSTORE_BASE64 secret is missing or empty!"
+          KEYSTORE_FILE="${{ github.workspace }}/release.keystore"
+          echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_FILE"
+          if [ ! -s "$KEYSTORE_FILE" ]; then
+            echo "::error::Keystore decode resulted in an empty file. Check the Base64 encoding."
             exit 1
           fi
+          echo "Keystore successfully decoded to $KEYSTORE_FILE"
 
-      # Build Release APK using Gradle
+      # Build Signed Release APK
       - name: Build Release APK
         env:
-          KEYSTORE_PATH: "${{ github.workspace }}/my-upload-key.jks"
+          KEYSTORE_PATH: "${{ github.workspace }}/release.keystore"
           STORE_PASSWORD: "${{ secrets.RELEASE_STORE_PASSWORD }}"
           KEY_PASSWORD: "${{ secrets.RELEASE_KEY_PASSWORD }}"
           KEY_ALIAS: "${{ secrets.RELEASE_KEY_ALIAS }}"
         run: |
           gradle :app:assembleRelease --no-daemon --stacktrace
 
-      # Upload APK to Workflow Artifacts (Immediate direct download)
-      - name: Upload Release APK Artifact
+      # Prepare Release Artifacts and Generate SHA-256 Checksum
+      - name: Prepare Assets & Checksum
+        run: |
+          OUTPUT_DIR="app/build/outputs/apk/release"
+          cd "$OUTPUT_DIR"
+          
+          # Find generated APK and rename to standardized app-release.apk
+          ORIGINAL_APK=$(ls *.apk | head -n 1)
+          if [ -z "$ORIGINAL_APK" ]; then
+            echo "::error::No release APK found in $OUTPUT_DIR"
+            exit 1
+          fi
+          
+          if [ "$ORIGINAL_APK" != "app-release.apk" ]; then
+            cp "$ORIGINAL_APK" app-release.apk
+          fi
+          
+          # Compute SHA-256 Checksum
+          sha256sum app-release.apk > app-release.apk.sha256
+          echo "Generated SHA-256 Checksum:"
+          cat app-release.apk.sha256
+
+      # Upload Artifact to GitHub Actions tab for direct download
+      - name: Upload Release APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: UltraVideoPlayer-Release-APK
-          path: app/build/outputs/apk/release/*.apk
+          name: UltraVideoPlayer-Release
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/app-release.apk.sha256
           if-no-files-found: error
           retention-days: 30
 
-      # Create GitHub Release & Upload APK asset
-      - name: Create GitHub Release and Upload APK
-        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+      # Determine Release Tag for GitHub Releases
+      - name: Determine Tag Name
+        id: release_info
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+            TITLE="${{ github.event.inputs.release_title }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            TITLE="Ultra Video Player Pro $TAG"
+          else
+            TAG="v1.0.0"
+            TITLE="Ultra Video Player Pro $TAG"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+
+      # Publish GitHub Release with APK & SHA-256 asset
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
-          name: ${{ github.event.inputs.release_title || github.ref_name }}
+          tag_name: ${{ steps.release_info.outputs.tag }}
+          name: ${{ steps.release_info.outputs.title }}
           draft: false
           prerelease: false
-          files: app/build/outputs/apk/release/*.apk
+          files: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/apk/release/app-release.apk.sha256
           body: |
-            ### 🚀 Ultra Video Player Pro Release
-            - High-performance native Android video player
+            ### 🚀 Ultra Video Player Pro Release ${{ steps.release_info.outputs.tag }}
+            
+            **What's New:**
+            - Modern White Theme with AMOLED Dark Theme toggle
+            - In-App Self-Update with SHA-256 integrity verification
             - Hardware acceleration with Android MediaCodec
-            - Smart MX Gestures & Touch Controls
-            - White Modern Theme with AMOLED Dark Mode
-            - Background Audio & PiP support
-            - In-app Self-Update enabled
+            - Smart MX Gestures (Volume, Brightness, Seek, Double-Tap)
+            - Background Audio Playback & Picture-in-Picture
+            - 4-Digit Privacy PIN Lock
+            
+            **Verification:**
+            - Checksum file: `app-release.apk.sha256`
+            - Package ID: `com.ultravideo.player`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

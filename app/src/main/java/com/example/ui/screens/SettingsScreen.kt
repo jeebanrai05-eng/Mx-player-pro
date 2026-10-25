@@ -564,6 +564,8 @@ fun SettingsScreen(
                                                     UpdateManager.downloadAndInstall(
                                                         context = context,
                                                         downloadUrl = info.downloadUrl,
+                                                        sha256Url = info.sha256Url,
+                                                        expectedSha256 = info.sha256Checksum,
                                                         onProgress = { progress ->
                                                             downloadProgress = progress
                                                         },
