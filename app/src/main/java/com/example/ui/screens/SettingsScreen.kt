@@ -96,6 +96,9 @@ fun SettingsScreen(
     var updateStatusText by remember { mutableStateOf("") }
     var isDownloadingUpdate by remember { mutableStateOf(false) }
     var downloadProgress by remember { mutableFloatStateOf(0f) }
+    var customReleaseUrl by remember { mutableStateOf("") }
+    var githubToken by remember { mutableStateOf("") }
+    var showAdvancedUpdateOptions by remember { mutableStateOf(false) }
 
     val accentOptions = listOf(
         "Blue" to ProBlue,
@@ -458,15 +461,20 @@ fun SettingsScreen(
                                 onClick = {
                                     if (!isCheckingUpdate && !isDownloadingUpdate) {
                                         isCheckingUpdate = true
-                                        updateStatusText = "Checking for new releases..."
+                                        updateStatusText = "Connecting to GitHub releases..."
                                         coroutineScope.launch {
-                                            val info = UpdateManager.checkUpdate()
+                                            val info = UpdateManager.checkUpdate(
+                                                githubToken = githubToken,
+                                                customReleaseOrApkUrl = customReleaseUrl
+                                            )
                                             updateResult = info
                                             isCheckingUpdate = false
                                             updateStatusText = if (info.hasUpdate) {
-                                                "New release v${info.latestVersionName} available!"
+                                                "New release ${info.latestVersionName} available!"
+                                            } else if (info.isPrivateRepoError) {
+                                                "Notice: GitHub returned HTTP 404 (Private Repository)"
                                             } else {
-                                                "App is up to date with latest features."
+                                                "App is up to date (v${info.latestVersionName})."
                                             }
                                         }
                                     }
@@ -520,7 +528,7 @@ fun SettingsScreen(
                                 ) {
                                     Column {
                                         Text(
-                                            text = "Release Highlights:",
+                                            text = info.releaseTitle,
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary
@@ -535,29 +543,29 @@ fun SettingsScreen(
                                     }
                                 }
 
-                                Spacer(modifier = Modifier.height(12.dp))
+                                if (info.downloadUrl.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(12.dp))
 
-                                if (isDownloadingUpdate) {
-                                    Column {
-                                        Text(
-                                            text = "Downloading APK update... ${(downloadProgress * 100).toInt()}%",
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        LinearProgressIndicator(
-                                            progress = { downloadProgress },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(6.dp)
-                                                .clip(CircleShape)
-                                        )
-                                    }
-                                } else {
-                                    Button(
-                                        onClick = {
-                                            if (info.downloadUrl.isNotEmpty()) {
+                                    if (isDownloadingUpdate) {
+                                        Column {
+                                            Text(
+                                                text = "Downloading APK update... ${(downloadProgress * 100).toInt()}%",
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.primary,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            LinearProgressIndicator(
+                                                progress = { downloadProgress },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(6.dp)
+                                                    .clip(CircleShape)
+                                            )
+                                        }
+                                    } else {
+                                        Button(
+                                            onClick = {
                                                 isDownloadingUpdate = true
                                                 downloadProgress = 0f
                                                 coroutineScope.launch {
@@ -566,6 +574,7 @@ fun SettingsScreen(
                                                         downloadUrl = info.downloadUrl,
                                                         sha256Url = info.sha256Url,
                                                         expectedSha256 = info.sha256Checksum,
+                                                        githubToken = githubToken,
                                                         onProgress = { progress ->
                                                             downloadProgress = progress
                                                         },
@@ -576,24 +585,60 @@ fun SettingsScreen(
                                                     )
                                                     isDownloadingUpdate = false
                                                 }
-                                            }
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = ProBlue
-                                        ),
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CloudDownload,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Download & Install Latest APK", fontSize = 13.sp)
+                                            },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = ProBlue
+                                            ),
+                                            shape = RoundedCornerShape(10.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CloudDownload,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Text("Download & Install APK (${info.fileSizeFormatted})", fontSize = 13.sp)
+                                        }
                                     }
                                 }
                             }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        TextButton(
+                            onClick = { showAdvancedUpdateOptions = !showAdvancedUpdateOptions },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text(
+                                text = if (showAdvancedUpdateOptions) "Hide Advanced Options" else "Custom Release / Private Repo Settings",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        if (showAdvancedUpdateOptions) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = customReleaseUrl,
+                                onValueChange = { customReleaseUrl = it },
+                                label = { Text("Direct Release Tag or APK URL", fontSize = 12.sp) },
+                                placeholder = { Text("e.g. https://github.com/jeebanrai05-eng/Mx-player-pro/releases/tag/v1.0.0-build.4", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = githubToken,
+                                onValueChange = { githubToken = it },
+                                label = { Text("GitHub Token (Optional for Private Repos)", fontSize = 12.sp) },
+                                placeholder = { Text("ghp_...", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
                         }
                     }
                 }

@@ -78,6 +78,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        enableHighRefreshRate()
 
         videoRepository = VideoRepository(this)
         preferencesRepository = UserPreferencesRepository(this)
@@ -127,6 +128,31 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+    }
+
+    private fun enableHighRefreshRate() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val display = display
+                val modes = display?.supportedModes ?: emptyArray()
+                val highRefreshMode = modes.maxByOrNull { it.refreshRate }
+                if (highRefreshMode != null && highRefreshMode.refreshRate >= 80f) {
+                    val params = window.attributes
+                    params.preferredDisplayModeId = highRefreshMode.modeId
+                    window.attributes = params
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                @Suppress("DEPRECATION")
+                val display = windowManager.defaultDisplay
+                val modes = display?.supportedModes ?: emptyArray()
+                val highRefreshMode = modes.maxByOrNull { it.refreshRate }
+                if (highRefreshMode != null && highRefreshMode.refreshRate >= 80f) {
+                    val params = window.attributes
+                    params.preferredDisplayModeId = highRefreshMode.modeId
+                    window.attributes = params
+                }
+            }
+        } catch (_: Exception) {}
     }
 }
 

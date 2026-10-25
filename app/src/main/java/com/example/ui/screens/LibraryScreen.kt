@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.BackHandler
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -142,6 +143,12 @@ fun LibraryScreen(
     var showExploreOnlineSheet by remember { mutableStateOf(false) }
     var selectedVideoForInfo by remember { mutableStateOf<VideoItem?>(null) }
 
+    if (activeBottomNav != BottomNavTab.FOLDERS) {
+        BackHandler {
+            activeBottomNav = BottomNavTab.FOLDERS
+        }
+    }
+
     // SAF File Picker
     val openDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
@@ -249,7 +256,7 @@ fun LibraryScreen(
                             Spacer(modifier = Modifier.width(10.dp))
 
                             Text(
-                                text = "Ultra Player ",
+                                text = "MX Player ",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -345,7 +352,7 @@ fun LibraryScreen(
                                         text = { Text("Settings", color = MaterialTheme.colorScheme.onSurface) },
                                         onClick = {
                                             showTopMenu = false
-                                            onOpenSettings()
+                                            activeBottomNav = BottomNavTab.SETTINGS
                                         }
                                     )
                                 }
@@ -420,77 +427,105 @@ fun LibraryScreen(
             }
         },
         bottomBar = {
-            // Modern Bottom Navigation Bar matching reference UI
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
+            // MX Player Pro styled Down Bar with active indicator line
+            androidx.compose.material3.Surface(
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 8.dp,
+                shadowElevation = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f), RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                    .border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                    )
             ) {
-                BottomNavTab.values().forEach { tab ->
-                    val isSelected = activeBottomNav == tab
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp, horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    BottomNavTab.values().forEach { tab ->
+                        val isSelected = activeBottomNav == tab
 
-                    NavigationBarItem(
-                        selected = isSelected,
-                        onClick = {
-                            activeBottomNav = tab
-                            when (tab) {
-                                BottomNavTab.HOME -> activePillTab = TopPillTab.ALL_VIDEOS
-                                BottomNavTab.FOLDERS -> activePillTab = TopPillTab.FOLDERS
-                                BottomNavTab.MY_LIST -> Unit
-                                BottomNavTab.SETTINGS -> onOpenSettings()
-                            }
-                        },
-                        icon = {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    activeBottomNav = tab
+                                    when (tab) {
+                                        BottomNavTab.HOME -> activePillTab = TopPillTab.ALL_VIDEOS
+                                        BottomNavTab.FOLDERS -> activePillTab = TopPillTab.FOLDERS
+                                        BottomNavTab.MY_LIST -> Unit
+                                        BottomNavTab.SETTINGS -> Unit
+                                    }
+                                }
+                                .padding(horizontal = 14.dp, vertical = 4.dp)
+                        ) {
                             Icon(
                                 imageVector = tab.icon,
                                 contentDescription = tab.title,
-                                modifier = Modifier.size(22.dp)
+                                tint = if (isSelected) ProBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier.size(23.dp)
                             )
-                        },
-                        label = {
+                            Spacer(modifier = Modifier.height(3.dp))
                             Text(
                                 text = tab.title,
                                 fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) ProBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                             )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = ProBlue,
-                            selectedTextColor = ProBlue,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                            indicatorColor = ProBlue.copy(alpha = 0.12f)
-                        )
-                    )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .width(22.dp)
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                listOf(Color(0xFF38BDF8), ProBlue)
+                                            )
+                                        )
+                                )
+                            } else {
+                                Spacer(modifier = Modifier.height(3.dp))
+                            }
+                        }
+                    }
                 }
             }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    openDocumentLauncher.launch(arrayOf("video/*"))
-                },
-                containerColor = ProBlue,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.testTag("open_video_file_fab")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (activeBottomNav != BottomNavTab.SETTINGS) {
+                FloatingActionButton(
+                    onClick = {
+                        openDocumentLauncher.launch(arrayOf("video/*"))
+                    },
+                    containerColor = ProBlue,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.testTag("open_video_file_fab")
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.FileOpen,
-                        contentDescription = "Open Video File"
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Open File",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileOpen,
+                            contentDescription = "Open Video File"
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Open File",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
         },
@@ -502,6 +537,14 @@ fun LibraryScreen(
                 .padding(innerPadding)
         ) {
             when {
+                // If "Settings" is selected from bottom nav
+                activeBottomNav == BottomNavTab.SETTINGS -> {
+                    SettingsScreen(
+                        userPreferences = userPreferences,
+                        preferencesRepository = preferencesRepository,
+                        onNavigateBack = { activeBottomNav = BottomNavTab.FOLDERS }
+                    )
+                }
                 // If "My List" is selected from bottom nav
                 activeBottomNav == BottomNavTab.MY_LIST -> {
                     MyListContent(
