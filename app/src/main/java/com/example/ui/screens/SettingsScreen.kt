@@ -21,19 +21,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.ColorLens
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -46,6 +53,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -54,13 +62,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.local.UserPreferences
 import com.example.data.local.UserPreferencesRepository
-import com.example.ui.theme.AccentBlue
+import com.example.ui.components.UpdateInfo
+import com.example.ui.components.UpdateManager
 import com.example.ui.theme.AccentCyan
 import com.example.ui.theme.AccentGreen
 import com.example.ui.theme.AccentOrange
@@ -78,7 +88,14 @@ fun SettingsScreen(
 ) {
     BackHandler(onBack = onNavigateBack)
     val coroutineScope = rememberCoroutineScope()
+    val context = LocalContext.current
     var showPinDialog by remember { mutableStateOf(false) }
+
+    var isCheckingUpdate by remember { mutableStateOf(false) }
+    var updateResult by remember { mutableStateOf<UpdateInfo?>(null) }
+    var updateStatusText by remember { mutableStateOf("") }
+    var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var downloadProgress by remember { mutableFloatStateOf(0f) }
 
     val accentOptions = listOf(
         "Blue" to ProBlue,
@@ -403,6 +420,178 @@ fun SettingsScreen(
                                     checkedTrackColor = MaterialTheme.colorScheme.primary
                                 )
                             )
+                        }
+                    }
+                }
+            }
+
+            // Software Update Section
+            item {
+                SettingsSectionHeader(title = "App Updates & Releases", icon = Icons.Default.SystemUpdate)
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Ultra Video Player Pro",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Installed: v${UpdateManager.currentVersionName} (Build ${UpdateManager.currentVersionCode})",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    if (!isCheckingUpdate && !isDownloadingUpdate) {
+                                        isCheckingUpdate = true
+                                        updateStatusText = "Checking for new releases..."
+                                        coroutineScope.launch {
+                                            val info = UpdateManager.checkUpdate()
+                                            updateResult = info
+                                            isCheckingUpdate = false
+                                            updateStatusText = if (info.hasUpdate) {
+                                                "New release v${info.latestVersionName} available!"
+                                            } else {
+                                                "App is up to date with latest features."
+                                            }
+                                        }
+                                    }
+                                },
+                                enabled = !isCheckingUpdate && !isDownloadingUpdate,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (isCheckingUpdate) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Checking...", fontSize = 12.sp)
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Check Updates", fontSize = 12.sp)
+                                }
+                            }
+                        }
+
+                        if (updateStatusText.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Text(
+                                text = updateStatusText,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+
+                            updateResult?.let { info ->
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                                        .padding(12.dp)
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = "Release Highlights:",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = info.releaseNotes,
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            lineHeight = 16.sp
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                if (isDownloadingUpdate) {
+                                    Column {
+                                        Text(
+                                            text = "Downloading APK update... ${(downloadProgress * 100).toInt()}%",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        LinearProgressIndicator(
+                                            progress = { downloadProgress },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(6.dp)
+                                                .clip(CircleShape)
+                                        )
+                                    }
+                                } else {
+                                    Button(
+                                        onClick = {
+                                            if (info.downloadUrl.isNotEmpty()) {
+                                                isDownloadingUpdate = true
+                                                downloadProgress = 0f
+                                                coroutineScope.launch {
+                                                    UpdateManager.downloadAndInstall(
+                                                        context = context,
+                                                        downloadUrl = info.downloadUrl,
+                                                        onProgress = { progress ->
+                                                            downloadProgress = progress
+                                                        },
+                                                        onError = { err ->
+                                                            isDownloadingUpdate = false
+                                                            updateStatusText = "Update notice: $err"
+                                                        }
+                                                    )
+                                                    isDownloadingUpdate = false
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = ProBlue
+                                        ),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CloudDownload,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Download & Install Latest APK", fontSize = 13.sp)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
