@@ -10,13 +10,13 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release version tag (e.g. v1.0.0)'
+        description: 'Release version tag (e.g. v1.0.1)'
         required: false
-        default: 'v1.0.0'
+        default: 'v1.0.1'
       release_title:
         description: 'Release Title'
         required: false
-        default: 'Ultra Video Player Pro Release'
+        default: 'Ultra Video Player Pro v1.0.1'
 
 jobs:
   build-release:
@@ -145,7 +145,7 @@ jobs:
             TITLE="Ultra Video Player Pro $TAG"
           else
             # For branch pushes, use build run number to avoid tag conflicts
-            TAG="v1.0.0-build.${{ github.run_number }}"
+            TAG="v1.0.1-build.${{ github.run_number }}"
             TITLE="Ultra Video Player Pro $TAG"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
@@ -166,15 +166,15 @@ jobs:
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/release/app-release.apk.sha256
           body: |
-            ### 🚀 Ultra Video Player Pro Release ${{ steps.release_info.outputs.tag }}
+            ### 🚀 Ultra Video Player Pro Release ${{ steps.release_info.outputs.tag }} (v1.0.1)
             
-            **What's New:**
-            - Modern White Theme with AMOLED Dark Theme toggle
-            - In-App Self-Update with SHA-256 integrity verification
-            - Hardware acceleration with Android MediaCodec
-            - Smart MX Gestures (Volume, Brightness, Seek, Double-Tap)
-            - Background Audio Playback & Picture-in-Picture
-            - 4-Digit Privacy PIN Lock
+            **What's New in v1.0.1:**
+            - 🗑️ Video Deletion: Full user support to delete videos directly from 3-dots menus with Scoped Storage MediaStore handling
+            - 🔒 Video Privacy Folder / Vault: Secure 4-digit PIN protection, hide videos from gallery/storage, unlock/restore, and direct playback
+            - ⚡ 120fps ultra-smooth display refresh rate and GPU hardware acceleration
+            - 📱 MX Player Pro style Top Bar with search, sort, and Down Navigation Bar
+            - 🔄 In-App Self-Update with direct GitHub APK download and SHA-256 verification
+            - 🎨 Modern White Theme and AMOLED Dark Theme with 5 custom accents
             
             **Verification:**
             - Checksum file: `app-release.apk.sha256`

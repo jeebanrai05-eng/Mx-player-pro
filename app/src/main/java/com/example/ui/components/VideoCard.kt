@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -61,6 +63,8 @@ fun VideoCard(
     onToggleFavorite: () -> Unit,
     onShowInfo: () -> Unit,
     onRemoveHistory: (() -> Unit)? = null,
+    onDeleteClick: (() -> Unit)? = null,
+    onLockToVault: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (isGrid) {
@@ -70,6 +74,8 @@ fun VideoCard(
             onToggleFavorite = onToggleFavorite,
             onShowInfo = onShowInfo,
             onRemoveHistory = onRemoveHistory,
+            onDeleteClick = onDeleteClick,
+            onLockToVault = onLockToVault,
             modifier = modifier
         )
     } else {
@@ -79,6 +85,8 @@ fun VideoCard(
             onToggleFavorite = onToggleFavorite,
             onShowInfo = onShowInfo,
             onRemoveHistory = onRemoveHistory,
+            onDeleteClick = onDeleteClick,
+            onLockToVault = onLockToVault,
             modifier = modifier
         )
     }
@@ -91,6 +99,8 @@ fun VideoListCard(
     onToggleFavorite: () -> Unit,
     onShowInfo: () -> Unit,
     onRemoveHistory: (() -> Unit)?,
+    onDeleteClick: (() -> Unit)? = null,
+    onLockToVault: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -298,6 +308,40 @@ fun VideoListCard(
                             onShowInfo()
                         }
                     )
+                    if (onLockToVault != null) {
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            text = { Text("Move to Private Folder", color = MaterialTheme.colorScheme.onSurface) },
+                            onClick = {
+                                menuExpanded = false
+                                onLockToVault()
+                            }
+                        )
+                    }
+                    if (onDeleteClick != null) {
+                        DropdownMenuItem(
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Delete,
+                                    contentDescription = null,
+                                    tint = StatusRed,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            },
+                            text = { Text("Delete Video", color = StatusRed) },
+                            onClick = {
+                                menuExpanded = false
+                                onDeleteClick()
+                            }
+                        )
+                    }
                     if (onRemoveHistory != null) {
                         DropdownMenuItem(
                             text = { Text("Clear from History", color = StatusRed) },
@@ -320,6 +364,8 @@ fun VideoGridCard(
     onToggleFavorite: () -> Unit,
     onShowInfo: () -> Unit,
     onRemoveHistory: (() -> Unit)?,
+    onDeleteClick: (() -> Unit)? = null,
+    onLockToVault: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -479,6 +525,40 @@ fun VideoGridCard(
                                 onShowInfo()
                             }
                         )
+                        if (onLockToVault != null) {
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                text = { Text("Move to Private", color = MaterialTheme.colorScheme.onSurface) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onLockToVault()
+                                }
+                            )
+                        }
+                        if (onDeleteClick != null) {
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = null,
+                                        tint = StatusRed,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                },
+                                text = { Text("Delete Video", color = StatusRed) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onDeleteClick()
+                                }
+                            )
+                        }
                     }
                 }
             }

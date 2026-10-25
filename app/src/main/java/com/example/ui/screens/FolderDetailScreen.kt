@@ -58,6 +58,8 @@ fun FolderDetailScreen(
     onToggleGridView: () -> Unit,
     onVideoClick: (VideoItem) -> Unit,
     onToggleFavorite: (VideoItem) -> Unit,
+    onDeleteVideo: ((VideoItem) -> Unit)? = null,
+    onLockToVault: ((VideoItem) -> Unit)? = null,
     onNavigateBack: () -> Unit
 ) {
     BackHandler(onBack = onNavigateBack)
@@ -125,7 +127,9 @@ fun FolderDetailScreen(
                             isGrid = true,
                             onClick = { onVideoClick(video) },
                             onToggleFavorite = { onToggleFavorite(video) },
-                            onShowInfo = { selectedVideoForInfo = video }
+                            onShowInfo = { selectedVideoForInfo = video },
+                            onDeleteClick = if (onDeleteVideo != null) { { onDeleteVideo(video) } } else null,
+                            onLockToVault = if (onLockToVault != null) { { onLockToVault(video) } } else null
                         )
                     }
                 }
@@ -141,7 +145,9 @@ fun FolderDetailScreen(
                             isGrid = false,
                             onClick = { onVideoClick(video) },
                             onToggleFavorite = { onToggleFavorite(video) },
-                            onShowInfo = { selectedVideoForInfo = video }
+                            onShowInfo = { selectedVideoForInfo = video },
+                            onDeleteClick = if (onDeleteVideo != null) { { onDeleteVideo(video) } } else null,
+                            onLockToVault = if (onLockToVault != null) { { onLockToVault(video) } } else null
                         )
                     }
                 }

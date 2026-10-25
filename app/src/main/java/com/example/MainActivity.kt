@@ -50,6 +50,7 @@ import com.example.ui.components.PinLockScreen
 import com.example.ui.screens.FolderDetailScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.PlayerScreen
+import com.example.ui.screens.PrivateVaultScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.theme.AccentBlue
 import com.example.ui.theme.AccentCyan
@@ -68,6 +69,7 @@ sealed class Screen {
     data class FolderDetail(val folderName: String) : Screen()
     data class Player(val videoList: List<VideoItem>, val startIndex: Int) : Screen()
     object Settings : Screen()
+    object PrivateVault : Screen()
 }
 
 class MainActivity : ComponentActivity() {
@@ -244,6 +246,9 @@ fun UltraVideoApp(
                     },
                     onOpenSettings = {
                         currentScreen = Screen.Settings
+                    },
+                    onOpenPrivateVault = {
+                        currentScreen = Screen.PrivateVault
                     }
                 )
             }
@@ -265,6 +270,21 @@ fun UltraVideoApp(
                     onToggleFavorite = { video ->
                         coroutineScope.launch {
                             videoRepository.toggleFavorite(video)
+                        }
+                    },
+                    onDeleteVideo = { video ->
+                        coroutineScope.launch {
+                            videoRepository.deleteVideo(video)
+                        }
+                    },
+                    onLockToVault = { video ->
+                        coroutineScope.launch {
+                            if (!videoRepository.vaultManager.isPinConfigured()) {
+                                currentScreen = Screen.PrivateVault
+                            } else {
+                                videoRepository.vaultManager.lockVideo(video)
+                                videoRepository.notifyVideoDeleted(video.contentUriString)
+                            }
                         }
                     },
                     onNavigateBack = {
@@ -289,6 +309,17 @@ fun UltraVideoApp(
                 SettingsScreen(
                     userPreferences = userPreferences,
                     preferencesRepository = preferencesRepository,
+                    onNavigateBack = {
+                        currentScreen = Screen.Library
+                    }
+                )
+            }
+            is Screen.PrivateVault -> {
+                PrivateVaultScreen(
+                    repository = videoRepository,
+                    onPlayVideo = { list, index ->
+                        currentScreen = Screen.Player(list, index)
+                    },
                     onNavigateBack = {
                         currentScreen = Screen.Library
                     }

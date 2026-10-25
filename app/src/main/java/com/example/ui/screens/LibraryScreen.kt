@@ -1,12 +1,16 @@
 package com.example.ui.screens
 
-import androidx.activity.compose.BackHandler
+import android.app.Activity
 import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +44,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
@@ -47,10 +52,14 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -68,6 +77,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -104,6 +114,7 @@ import com.example.ui.components.VideoCard
 import com.example.ui.components.VideoInfoDialog
 import com.example.ui.theme.ProBlue
 import com.example.ui.theme.ProBlueDark
+import com.example.ui.theme.StatusRed
 import kotlinx.coroutines.launch
 
 enum class TopPillTab(val title: String, val icon: ImageVector) {
@@ -117,6 +128,7 @@ enum class BottomNavTab(val title: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
     FOLDERS("Folders", Icons.Default.Folder),
     MY_LIST("My List", Icons.Default.Bookmark),
+    PRIVATE("Private", Icons.Default.Lock),
     SETTINGS("Settings", Icons.Default.Settings)
 }
 
@@ -129,7 +141,8 @@ fun LibraryScreen(
     repository: VideoRepository,
     onVideoClick: (List<VideoItem>, Int) -> Unit,
     onFolderClick: (FolderItem) -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    onOpenPrivateVault: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -156,6 +169,44 @@ fun LibraryScreen(
         if (uri != null) {
             val pickedVideo = repository.getVideoMetadataFromUri(uri)
             onVideoClick(listOf(pickedVideo), 0)
+        }
+    }
+
+    var videoPendingDelete by remember { mutableStateOf<VideoItem?>(null) }
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+
+    val deleteIntentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            videoPendingDelete?.let { vid ->
+                repository.notifyVideoDeleted(vid.contentUriString)
+                Toast.makeText(context, "Video deleted", Toast.LENGTH_SHORT).show()
+            }
+        }
+        videoPendingDelete = null
+    }
+
+    val onDeleteRequested: (VideoItem) -> Unit = { video ->
+        videoPendingDelete = video
+        showDeleteConfirmDialog = true
+    }
+
+    val onLockToVaultRequested: (VideoItem) -> Unit = { video ->
+        coroutineScope.launch {
+            val isConfigured = repository.vaultManager.isPinConfigured()
+            if (!isConfigured) {
+                Toast.makeText(context, "Please set a 4-digit Vault PIN first", Toast.LENGTH_LONG).show()
+                onOpenPrivateVault()
+            } else {
+                val result = repository.vaultManager.lockVideo(video)
+                if (result.isSuccess) {
+                    repository.notifyVideoDeleted(video.contentUriString)
+                    Toast.makeText(context, "Moved '${video.title}' to Private Folder", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Failed to move video to vault", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -461,6 +512,9 @@ fun LibraryScreen(
                                         BottomNavTab.HOME -> activePillTab = TopPillTab.ALL_VIDEOS
                                         BottomNavTab.FOLDERS -> activePillTab = TopPillTab.FOLDERS
                                         BottomNavTab.MY_LIST -> Unit
+                                        BottomNavTab.PRIVATE -> {
+                                            onOpenPrivateVault()
+                                        }
                                         BottomNavTab.SETTINGS -> Unit
                                     }
                                 }
@@ -553,7 +607,9 @@ fun LibraryScreen(
                         isGridView = userPreferences.isGridView,
                         onVideoClick = { list, idx -> onVideoClick(list, idx) },
                         onToggleFavorite = { vid -> coroutineScope.launch { repository.toggleFavorite(vid) } },
-                        onShowInfo = { vid -> selectedVideoForInfo = vid }
+                        onShowInfo = { vid -> selectedVideoForInfo = vid },
+                        onDeleteClick = { onDeleteRequested(it) },
+                        onLockToVault = { onLockToVaultRequested(it) }
                     )
                 }
                 // When Folders pill is active
@@ -563,6 +619,77 @@ fun LibraryScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenPrivateVault() }
+                                    .testTag("private_folder_banner_card"),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(46.dp)
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = "Private Folder",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(14.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "Private Folder",
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = "PIN LOCK",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Hide and protect personal videos",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+
                         items(folders, key = { it.name }) { folder ->
                             FolderCard(
                                 folder = folder,
@@ -588,7 +715,9 @@ fun LibraryScreen(
                                     isGrid = true,
                                     onClick = { onVideoClick(filteredVideos, index) },
                                     onToggleFavorite = { coroutineScope.launch { repository.toggleFavorite(video) } },
-                                    onShowInfo = { selectedVideoForInfo = video }
+                                    onShowInfo = { selectedVideoForInfo = video },
+                                    onDeleteClick = { onDeleteRequested(video) },
+                                    onLockToVault = { onLockToVaultRequested(video) }
                                 )
                             }
                         }
@@ -605,7 +734,9 @@ fun LibraryScreen(
                                     isGrid = false,
                                     onClick = { onVideoClick(filteredVideos, index) },
                                     onToggleFavorite = { coroutineScope.launch { repository.toggleFavorite(video) } },
-                                    onShowInfo = { selectedVideoForInfo = video }
+                                    onShowInfo = { selectedVideoForInfo = video },
+                                    onDeleteClick = { onDeleteRequested(video) },
+                                    onLockToVault = { onLockToVaultRequested(video) }
                                 )
                             }
                         }
@@ -671,6 +802,57 @@ fun LibraryScreen(
                     }
                 }
             }
+
+            // Delete Video Confirmation Dialog
+            if (showDeleteConfirmDialog && videoPendingDelete != null) {
+                val target = videoPendingDelete!!
+                AlertDialog(
+                    onDismissRequest = {
+                        showDeleteConfirmDialog = false
+                        videoPendingDelete = null
+                    },
+                    title = { Text("Delete Video?") },
+                    text = {
+                        Text("Are you sure you want to delete '${target.title}'? This action will remove the video from your device storage.")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showDeleteConfirmDialog = false
+                                val intentSender = repository.createDeleteIntentSender(target)
+                                if (intentSender != null) {
+                                    deleteIntentLauncher.launch(
+                                        IntentSenderRequest.Builder(intentSender).build()
+                                    )
+                                } else {
+                                    coroutineScope.launch {
+                                        val deleted = repository.deleteVideo(target)
+                                        if (deleted) {
+                                            Toast.makeText(context, "Video deleted successfully", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Failed to delete video", Toast.LENGTH_SHORT).show()
+                                        }
+                                        videoPendingDelete = null
+                                    }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = StatusRed)
+                        ) {
+                            Text("Delete", color = Color.White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                showDeleteConfirmDialog = false
+                                videoPendingDelete = null
+                            }
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -682,7 +864,9 @@ private fun MyListContent(
     isGridView: Boolean,
     onVideoClick: (List<VideoItem>, Int) -> Unit,
     onToggleFavorite: (VideoItem) -> Unit,
-    onShowInfo: (VideoItem) -> Unit
+    onShowInfo: (VideoItem) -> Unit,
+    onDeleteClick: (VideoItem) -> Unit,
+    onLockToVault: (VideoItem) -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -716,7 +900,9 @@ private fun MyListContent(
                         onVideoClick(favoriteVideos, if (idx != -1) idx else 0)
                     },
                     onToggleFavorite = { onToggleFavorite(video) },
-                    onShowInfo = { onShowInfo(video) }
+                    onShowInfo = { onShowInfo(video) },
+                    onDeleteClick = { onDeleteClick(video) },
+                    onLockToVault = { onLockToVault(video) }
                 )
             }
         }
@@ -749,7 +935,9 @@ private fun MyListContent(
                         onVideoClick(recentVideos, if (idx != -1) idx else 0)
                     },
                     onToggleFavorite = { onToggleFavorite(video) },
-                    onShowInfo = { onShowInfo(video) }
+                    onShowInfo = { onShowInfo(video) },
+                    onDeleteClick = { onDeleteClick(video) },
+                    onLockToVault = { onLockToVault(video) }
                 )
             }
         }

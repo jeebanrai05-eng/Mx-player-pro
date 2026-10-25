@@ -2,6 +2,7 @@ package com.example.data.repository
 
 import android.content.ContentUris
 import android.content.Context
+import android.content.IntentSender
 import android.database.Cursor
 import android.net.Uri
 import android.os.Build
@@ -13,6 +14,7 @@ import com.example.data.model.FolderItem
 import com.example.data.model.VideoItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -23,6 +25,10 @@ class VideoRepository(private val context: Context) {
 
     private val db = AppDatabase.getInstance(context)
     private val videoDao = db.videoDao()
+    val vaultManager = PrivateVaultManager(context)
+
+    private val deletedUrisFlow = MutableStateFlow<Set<String>>(emptySet())
+    private val refreshTrigger = MutableStateFlow(0)
 
     // Bundled public domain & creative commons test videos for emulator verification
     val sampleVideos = listOf(
@@ -220,28 +226,35 @@ class VideoRepository(private val context: Context) {
     }
 
     fun observeAllVideosWithRecords(includeSamplesIfEmpty: Boolean = true): Flow<List<VideoItem>> {
-        return flow {
-            val deviceVideos = fetchDeviceVideos()
-            val list = if (deviceVideos.isEmpty() && includeSamplesIfEmpty) {
-                sampleVideos
-            } else {
-                deviceVideos
-            }
-            emit(list)
-        }.combine(videoDao.getAllRecordsFlow()) { videos, records ->
-            val recordMap = records.associateBy { it.uri }
-            videos.map { video ->
-                val record = recordMap[video.contentUriString]
-                if (record != null) {
-                    video.copy(
-                        playbackPosition = record.playbackPosition,
-                        isFavorite = record.isFavorite,
-                        lastPlayedTimestamp = record.lastPlayedTimestamp
-                    )
+        return combine(
+            flow {
+                val deviceVideos = fetchDeviceVideos()
+                val list = if (deviceVideos.isEmpty() && includeSamplesIfEmpty) {
+                    sampleVideos
                 } else {
-                    video
+                    deviceVideos
                 }
-            }
+                emit(list)
+            },
+            videoDao.getAllRecordsFlow(),
+            deletedUrisFlow,
+            refreshTrigger
+        ) { videos, records, deletedUris, _ ->
+            val recordMap = records.associateBy { it.uri }
+            videos
+                .filterNot { it.contentUriString in deletedUris }
+                .map { video ->
+                    val record = recordMap[video.contentUriString]
+                    if (record != null) {
+                        video.copy(
+                            playbackPosition = record.playbackPosition,
+                            isFavorite = record.isFavorite,
+                            lastPlayedTimestamp = record.lastPlayedTimestamp
+                        )
+                    } else {
+                        video
+                    }
+                }
         }.flowOn(Dispatchers.IO)
     }
 
@@ -339,5 +352,64 @@ class VideoRepository(private val context: Context) {
             path = uri.toString(),
             mimeType = context.contentResolver.getType(uri) ?: "video/*"
         )
+    }
+
+    fun createDeleteIntentSender(video: VideoItem): IntentSender? {
+        return try {
+            val uri = Uri.parse(video.contentUriString)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && uri.authority == MediaStore.AUTHORITY) {
+                MediaStore.createDeleteRequest(context.contentResolver, listOf(uri)).intentSender
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun deleteVideo(video: VideoItem): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val uri = Uri.parse(video.contentUriString)
+            var deleted = false
+
+            // 1. If it's a file path or local app file, delete direct
+            if (video.path.isNotBlank()) {
+                val file = File(video.path)
+                if (file.exists() && file.canWrite()) {
+                    deleted = file.delete()
+                }
+            }
+
+            // 2. Content Resolver deletion (Pre-Android 11 or own content)
+            if (uri.scheme == "content") {
+                try {
+                    val count = context.contentResolver.delete(uri, null, null)
+                    if (count > 0) deleted = true
+                } catch (_: Exception) {}
+            }
+
+            // 3. Remove from Room DB
+            videoDao.deleteRecord(video.contentUriString)
+
+            // 4. Mark URI as deleted in reactive filter
+            notifyVideoDeleted(video.contentUriString)
+            true
+        } catch (e: Exception) {
+            e.printStackTrace()
+            notifyVideoDeleted(video.contentUriString)
+            false
+        }
+    }
+
+    fun notifyVideoDeleted(uriString: String) {
+        val updated = deletedUrisFlow.value.toMutableSet()
+        updated.add(uriString)
+        deletedUrisFlow.value = updated
+        requestRefresh()
+    }
+
+    fun requestRefresh() {
+        refreshTrigger.value += 1
     }
 }
