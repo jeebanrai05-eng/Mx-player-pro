@@ -1,0 +1,6 @@
+{
+  "name": "Ultra Video Player",
+  "description": "Premium Android video player inspired by MX Player with advanced gestures, subtitle selection, audio track switching, background playback, and AMOLED dark UI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
