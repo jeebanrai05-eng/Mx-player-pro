@@ -34,7 +34,9 @@ data class UserPreferences(
     val sortBy: SortOption = SortOption.DATE_DESC,
     val pinLockCode: String = "",
     val isPinLockEnabled: Boolean = false,
-    val autoCheckUpdates: Boolean = true
+    val autoCheckUpdates: Boolean = true,
+    val githubOwner: String = "jeebanrai05-eng",
+    val githubRepo: String = "Mx-player-pro"
 )
 
 class UserPreferencesRepository(private val context: Context) {
@@ -52,6 +54,8 @@ class UserPreferencesRepository(private val context: Context) {
         val PIN_LOCK_CODE = stringPreferencesKey("pin_lock_code")
         val IS_PIN_LOCK_ENABLED = booleanPreferencesKey("is_pin_lock_enabled")
         val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
+        val GITHUB_OWNER = stringPreferencesKey("github_owner")
+        val GITHUB_REPO = stringPreferencesKey("github_repo")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data.map { preferences ->
@@ -72,6 +76,8 @@ class UserPreferencesRepository(private val context: Context) {
         val pin = preferences[PreferencesKeys.PIN_LOCK_CODE] ?: ""
         val isPinEnabled = preferences[PreferencesKeys.IS_PIN_LOCK_ENABLED] ?: false
         val autoCheckUpdates = preferences[PreferencesKeys.AUTO_CHECK_UPDATES] ?: true
+        val owner = preferences[PreferencesKeys.GITHUB_OWNER] ?: "jeebanrai05-eng"
+        val repo = preferences[PreferencesKeys.GITHUB_REPO] ?: "Mx-player-pro"
 
         UserPreferences(
             isDarkTheme = isDark,
@@ -85,7 +91,9 @@ class UserPreferencesRepository(private val context: Context) {
             sortBy = sort,
             pinLockCode = pin,
             isPinLockEnabled = isPinEnabled,
-            autoCheckUpdates = autoCheckUpdates
+            autoCheckUpdates = autoCheckUpdates,
+            githubOwner = owner,
+            githubRepo = repo
         )
     }
 
@@ -134,5 +142,12 @@ class UserPreferencesRepository(private val context: Context) {
 
     suspend fun updateAutoCheckUpdates(enabled: Boolean) {
         context.dataStore.edit { it[PreferencesKeys.AUTO_CHECK_UPDATES] = enabled }
+    }
+
+    suspend fun updateGithubRepoConfig(owner: String, repo: String) {
+        context.dataStore.edit {
+            it[PreferencesKeys.GITHUB_OWNER] = owner.trim()
+            it[PreferencesKeys.GITHUB_REPO] = repo.trim()
+        }
     }
 }

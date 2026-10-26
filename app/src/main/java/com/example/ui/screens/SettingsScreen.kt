@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -98,6 +99,8 @@ fun SettingsScreen(
     var downloadProgress by remember { mutableFloatStateOf(0f) }
     var customReleaseUrl by remember { mutableStateOf("") }
     var githubToken by remember { mutableStateOf("") }
+    var repoOwnerInput by remember { mutableStateOf(userPreferences.githubOwner) }
+    var repoNameInput by remember { mutableStateOf(userPreferences.githubRepo) }
     var showAdvancedUpdateOptions by remember { mutableStateOf(false) }
 
     val accentOptions = listOf(
@@ -464,6 +467,8 @@ fun SettingsScreen(
                                         updateStatusText = "Connecting to GitHub releases..."
                                         coroutineScope.launch {
                                             val info = UpdateManager.checkUpdate(
+                                                repoOwner = repoOwnerInput.trim().ifEmpty { UpdateManager.DEFAULT_REPO_OWNER },
+                                                repoName = repoNameInput.trim().ifEmpty { UpdateManager.DEFAULT_REPO_NAME },
                                                 githubToken = githubToken,
                                                 customReleaseOrApkUrl = customReleaseUrl
                                             )
@@ -673,12 +678,56 @@ fun SettingsScreen(
                         }
 
                         if (showAdvancedUpdateOptions) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = "GitHub Repository Configuration",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            OutlinedTextField(
+                                value = repoOwnerInput,
+                                onValueChange = { repoOwnerInput = it },
+                                label = { Text("GitHub Owner / Username", fontSize = 12.sp) },
+                                placeholder = { Text("e.g. jeebanrai05-eng or jeebanrai05", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+
                             Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = repoNameInput,
+                                onValueChange = { repoNameInput = it },
+                                label = { Text("GitHub Repository Name", fontSize = 12.sp) },
+                                placeholder = { Text("e.g. Mx-player-pro", fontSize = 11.sp) },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            )
+
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    coroutineScope.launch {
+                                        preferencesRepository.updateGithubRepoConfig(repoOwnerInput, repoNameInput)
+                                        Toast.makeText(context, "Repository settings saved!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text("Save Repository Settings", fontSize = 12.sp)
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
                             OutlinedTextField(
                                 value = customReleaseUrl,
                                 onValueChange = { customReleaseUrl = it },
-                                label = { Text("Direct Release Tag or APK URL", fontSize = 12.sp) },
-                                placeholder = { Text("e.g. https://github.com/jeebanrai05-eng/Mx-player-pro/releases/tag/v1.0.0-build.4", fontSize = 11.sp) },
+                                label = { Text("Direct Release Tag or Custom APK Link", fontSize = 12.sp) },
+                                placeholder = { Text("e.g. https://github.com/jeebanrai05-eng/Mx-player-pro/releases/tag/v1.0.2", fontSize = 11.sp) },
                                 singleLine = true,
                                 modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(10.dp)
@@ -715,7 +764,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = "Version 1.0 • Modern Material 3 UI",
+                            text = "Version 1.0.2 • Modern Material 3 UI",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

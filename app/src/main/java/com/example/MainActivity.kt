@@ -205,11 +205,14 @@ fun UltraVideoApp(
     var updateDownloadProgress by remember { mutableStateOf(0f) }
 
     // Background Update Check & System Notification
-    LaunchedEffect(userPreferences.autoCheckUpdates) {
+    LaunchedEffect(userPreferences.autoCheckUpdates, userPreferences.githubOwner, userPreferences.githubRepo) {
         if (userPreferences.autoCheckUpdates) {
             coroutineScope.launch {
                 try {
-                    val info = UpdateManager.checkUpdate()
+                    val info = UpdateManager.checkUpdate(
+                        repoOwner = userPreferences.githubOwner,
+                        repoName = userPreferences.githubRepo
+                    )
                     if (info.hasUpdate) {
                         availableUpdate = info
                         showUpdateDialog = true
@@ -241,7 +244,10 @@ fun UltraVideoApp(
         }
         if (intent?.getBooleanExtra(UpdateNotificationHelper.EXTRA_OPEN_UPDATE_DIALOG, false) == true) {
             coroutineScope.launch {
-                val info = UpdateManager.checkUpdate()
+                val info = UpdateManager.checkUpdate(
+                    repoOwner = userPreferences.githubOwner,
+                    repoName = userPreferences.githubRepo
+                )
                 if (info.hasUpdate) {
                     availableUpdate = info
                     showUpdateDialog = true
