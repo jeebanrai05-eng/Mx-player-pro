@@ -33,7 +33,8 @@ data class UserPreferences(
     val isGridView: Boolean = false,
     val sortBy: SortOption = SortOption.DATE_DESC,
     val pinLockCode: String = "",
-    val isPinLockEnabled: Boolean = false
+    val isPinLockEnabled: Boolean = false,
+    val autoCheckUpdates: Boolean = true
 )
 
 class UserPreferencesRepository(private val context: Context) {
@@ -50,6 +51,7 @@ class UserPreferencesRepository(private val context: Context) {
         val SORT_BY = stringPreferencesKey("sort_by")
         val PIN_LOCK_CODE = stringPreferencesKey("pin_lock_code")
         val IS_PIN_LOCK_ENABLED = booleanPreferencesKey("is_pin_lock_enabled")
+        val AUTO_CHECK_UPDATES = booleanPreferencesKey("auto_check_updates")
     }
 
     val userPreferencesFlow: Flow<UserPreferences> = context.dataStore.data.map { preferences ->
@@ -69,6 +71,7 @@ class UserPreferencesRepository(private val context: Context) {
         }
         val pin = preferences[PreferencesKeys.PIN_LOCK_CODE] ?: ""
         val isPinEnabled = preferences[PreferencesKeys.IS_PIN_LOCK_ENABLED] ?: false
+        val autoCheckUpdates = preferences[PreferencesKeys.AUTO_CHECK_UPDATES] ?: true
 
         UserPreferences(
             isDarkTheme = isDark,
@@ -81,7 +84,8 @@ class UserPreferencesRepository(private val context: Context) {
             isGridView = isGrid,
             sortBy = sort,
             pinLockCode = pin,
-            isPinLockEnabled = isPinEnabled
+            isPinLockEnabled = isPinEnabled,
+            autoCheckUpdates = autoCheckUpdates
         )
     }
 
@@ -126,5 +130,9 @@ class UserPreferencesRepository(private val context: Context) {
             it[PreferencesKeys.PIN_LOCK_CODE] = code
             it[PreferencesKeys.IS_PIN_LOCK_ENABLED] = enabled
         }
+    }
+
+    suspend fun updateAutoCheckUpdates(enabled: Boolean) {
+        context.dataStore.edit { it[PreferencesKeys.AUTO_CHECK_UPDATES] = enabled }
     }
 }

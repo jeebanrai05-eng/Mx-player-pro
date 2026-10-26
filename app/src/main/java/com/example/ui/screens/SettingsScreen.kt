@@ -505,6 +505,35 @@ fun SettingsScreen(
                             }
                         }
 
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Auto-Check & Notify Updates",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Receive notifications when new releases and features are available",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = userPreferences.autoCheckUpdates,
+                                onCheckedChange = { checked ->
+                                    coroutineScope.launch {
+                                        preferencesRepository.updateAutoCheckUpdates(checked)
+                                    }
+                                }
+                            )
+                        }
+
                         if (updateStatusText.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(12.dp))
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))

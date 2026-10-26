@@ -4,8 +4,10 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.IntentSender
 import android.database.Cursor
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import com.example.data.local.AppDatabase
@@ -357,8 +359,16 @@ class VideoRepository(private val context: Context) {
     fun createDeleteIntentSender(video: VideoItem): IntentSender? {
         return try {
             val uri = Uri.parse(video.contentUriString)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && uri.authority == MediaStore.AUTHORITY) {
-                MediaStore.createDeleteRequest(context.contentResolver, listOf(uri)).intentSender
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val mediaUri = if (uri.authority == MediaStore.AUTHORITY) {
+                    uri
+                } else if (video.id > 0) {
+                    ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, video.id)
+                } else null
+
+                if (mediaUri != null) {
+                    MediaStore.createDeleteRequest(context.contentResolver, listOf(mediaUri)).intentSender
+                } else null
             } else {
                 null
             }
@@ -369,37 +379,61 @@ class VideoRepository(private val context: Context) {
     }
 
     suspend fun deleteVideo(video: VideoItem): Boolean = withContext(Dispatchers.IO) {
-        try {
-            val uri = Uri.parse(video.contentUriString)
-            var deleted = false
+        var physicallyDeleted = false
+        val uri = Uri.parse(video.contentUriString)
 
-            // 1. If it's a file path or local app file, delete direct
-            if (video.path.isNotBlank()) {
+        // 1. Direct file deletion
+        if (video.path.isNotBlank()) {
+            try {
                 val file = File(video.path)
-                if (file.exists() && file.canWrite()) {
-                    deleted = file.delete()
+                if (file.exists() && file.delete()) {
+                    physicallyDeleted = true
                 }
-            }
-
-            // 2. Content Resolver deletion (Pre-Android 11 or own content)
-            if (uri.scheme == "content") {
-                try {
-                    val count = context.contentResolver.delete(uri, null, null)
-                    if (count > 0) deleted = true
-                } catch (_: Exception) {}
-            }
-
-            // 3. Remove from Room DB
-            videoDao.deleteRecord(video.contentUriString)
-
-            // 4. Mark URI as deleted in reactive filter
-            notifyVideoDeleted(video.contentUriString)
-            true
-        } catch (e: Exception) {
-            e.printStackTrace()
-            notifyVideoDeleted(video.contentUriString)
-            false
+            } catch (_: Exception) {}
         }
+
+        // 2. SAF Document deletion
+        if (!physicallyDeleted && uri.scheme == "content" && DocumentsContract.isDocumentUri(context, uri)) {
+            try {
+                physicallyDeleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
+            } catch (_: Exception) {}
+        }
+
+        // 3. ContentResolver deletion
+        if (!physicallyDeleted && uri.scheme == "content") {
+            try {
+                val rows = context.contentResolver.delete(uri, null, null)
+                if (rows > 0) physicallyDeleted = true
+            } catch (_: Exception) {}
+        }
+
+        // 4. MediaStore ID deletion
+        if (!physicallyDeleted && video.id > 0) {
+            try {
+                val mediaUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, video.id)
+                val rows = context.contentResolver.delete(mediaUri, null, null)
+                if (rows > 0) physicallyDeleted = true
+            } catch (_: Exception) {}
+        }
+
+        // 5. Force MediaStore to remove thumbnail and index from system gallery
+        if (video.path.isNotBlank()) {
+            try {
+                MediaScannerConnection.scanFile(context, arrayOf(video.path), null, null)
+            } catch (_: Exception) {}
+        }
+
+        // Remove from DB
+        videoDao.deleteRecord(video.contentUriString)
+
+        // For sample videos (negative IDs) or successfully deleted files:
+        if (physicallyDeleted || video.id < 0) {
+            notifyVideoDeleted(video.contentUriString)
+            return@withContext true
+        }
+
+        // Return false if Android OS confirmation (createDeleteRequest) is needed
+        false
     }
 
     fun notifyVideoDeleted(uriString: String) {

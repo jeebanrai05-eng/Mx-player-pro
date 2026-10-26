@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.app.Activity
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -181,10 +182,33 @@ fun LibraryScreen(
         if (result.resultCode == Activity.RESULT_OK) {
             videoPendingDelete?.let { vid ->
                 repository.notifyVideoDeleted(vid.contentUriString)
-                Toast.makeText(context, "Video deleted", Toast.LENGTH_SHORT).show()
+                if (vid.path.isNotBlank()) {
+                    try {
+                        MediaScannerConnection.scanFile(context, arrayOf(vid.path), null, null)
+                    } catch (_: Exception) {}
+                }
+                Toast.makeText(context, "Video deleted from device storage", Toast.LENGTH_SHORT).show()
             }
         }
         videoPendingDelete = null
+    }
+
+    var videoPendingVaultLock by remember { mutableStateOf<VideoItem?>(null) }
+    val vaultDeleteLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            videoPendingVaultLock?.let { vid ->
+                repository.notifyVideoDeleted(vid.contentUriString)
+                if (vid.path.isNotBlank()) {
+                    try {
+                        MediaScannerConnection.scanFile(context, arrayOf(vid.path), null, null)
+                    } catch (_: Exception) {}
+                }
+                Toast.makeText(context, "Original deleted from device. Video secured in Private Vault.", Toast.LENGTH_SHORT).show()
+            }
+        }
+        videoPendingVaultLock = null
     }
 
     val onDeleteRequested: (VideoItem) -> Unit = { video ->
@@ -201,8 +225,22 @@ fun LibraryScreen(
             } else {
                 val result = repository.vaultManager.lockVideo(video)
                 if (result.isSuccess) {
-                    repository.notifyVideoDeleted(video.contentUriString)
-                    Toast.makeText(context, "Moved '${video.title}' to Private Folder", Toast.LENGTH_SHORT).show()
+                    val deletedDirectly = repository.vaultManager.deleteOriginalMedia(video)
+                    if (deletedDirectly) {
+                        repository.notifyVideoDeleted(video.contentUriString)
+                        Toast.makeText(context, "Moved '${video.title}' to Private Vault & hidden from device", Toast.LENGTH_SHORT).show()
+                    } else {
+                        val intentSender = repository.createDeleteIntentSender(video)
+                        if (intentSender != null) {
+                            videoPendingVaultLock = video
+                            vaultDeleteLauncher.launch(
+                                IntentSenderRequest.Builder(intentSender).build()
+                            )
+                        } else {
+                            repository.notifyVideoDeleted(video.contentUriString)
+                            Toast.makeText(context, "Video secured in Private Vault", Toast.LENGTH_SHORT).show()
+                        }
+                    }
                 } else {
                     Toast.makeText(context, "Failed to move video to vault", Toast.LENGTH_SHORT).show()
                 }
@@ -819,20 +857,21 @@ fun LibraryScreen(
                         Button(
                             onClick = {
                                 showDeleteConfirmDialog = false
-                                val intentSender = repository.createDeleteIntentSender(target)
-                                if (intentSender != null) {
-                                    deleteIntentLauncher.launch(
-                                        IntentSenderRequest.Builder(intentSender).build()
-                                    )
-                                } else {
-                                    coroutineScope.launch {
-                                        val deleted = repository.deleteVideo(target)
-                                        if (deleted) {
-                                            Toast.makeText(context, "Video deleted successfully", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Failed to delete video", Toast.LENGTH_SHORT).show()
-                                        }
+                                coroutineScope.launch {
+                                    val deletedSilently = repository.deleteVideo(target)
+                                    if (deletedSilently) {
+                                        Toast.makeText(context, "Video deleted from device storage", Toast.LENGTH_SHORT).show()
                                         videoPendingDelete = null
+                                    } else {
+                                        val intentSender = repository.createDeleteIntentSender(target)
+                                        if (intentSender != null) {
+                                            deleteIntentLauncher.launch(
+                                                IntentSenderRequest.Builder(intentSender).build()
+                                            )
+                                        } else {
+                                            Toast.makeText(context, "Unable to delete file from device storage", Toast.LENGTH_SHORT).show()
+                                            videoPendingDelete = null
+                                        }
                                     }
                                 }
                             },

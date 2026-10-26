@@ -1,9 +1,14 @@
 package com.example.data.repository
 
+import android.content.ContentUris
 import android.content.Context
 import android.media.MediaMetadataRetriever
+import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import com.example.data.model.VideoItem
 import kotlinx.coroutines.Dispatchers
@@ -194,11 +199,66 @@ class PrivateVaultManager(private val context: Context) {
                 size = targetFile.length()
             )
 
+            // CRITICAL: Delete original file from public device storage so it is completely hidden
+            deleteOriginalMedia(video)
+
             Result.success(vaultedItem)
         } catch (e: Exception) {
             e.printStackTrace()
             Result.failure(e)
         }
+    }
+
+    /**
+     * Permanently deletes the original unencrypted media from device storage
+     * so it no longer appears in Gallery, File Managers, or other apps.
+     */
+    suspend fun deleteOriginalMedia(video: VideoItem): Boolean = withContext(Dispatchers.IO) {
+        var deleted = false
+
+        // 1. Try raw filesystem deletion
+        if (video.path.isNotBlank()) {
+            try {
+                val f = File(video.path)
+                if (f.exists() && f.delete()) {
+                    deleted = true
+                }
+            } catch (_: Exception) {}
+        }
+
+        // 2. Try SAF Document deletion if content URI
+        val uri = Uri.parse(video.contentUriString)
+        if (!deleted && uri.scheme == "content" && DocumentsContract.isDocumentUri(context, uri)) {
+            try {
+                deleted = DocumentsContract.deleteDocument(context.contentResolver, uri)
+            } catch (_: Exception) {}
+        }
+
+        // 3. Try ContentResolver deletion
+        if (!deleted && uri.scheme == "content") {
+            try {
+                val rows = context.contentResolver.delete(uri, null, null)
+                if (rows > 0) deleted = true
+            } catch (_: Exception) {}
+        }
+
+        // 4. Try MediaStore URI by ID
+        if (!deleted && video.id > 0) {
+            try {
+                val mediaUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, video.id)
+                val rows = context.contentResolver.delete(mediaUri, null, null)
+                if (rows > 0) deleted = true
+            } catch (_: Exception) {}
+        }
+
+        // 5. Force MediaStore to remove thumbnail and index from system gallery
+        if (video.path.isNotBlank()) {
+            try {
+                MediaScannerConnection.scanFile(context, arrayOf(video.path), null, null)
+            } catch (_: Exception) {}
+        }
+
+        deleted
     }
 
     suspend fun unlockVideo(vaultVideo: VideoItem): Result<File> = withContext(Dispatchers.IO) {
@@ -234,6 +294,16 @@ class PrivateVaultManager(private val context: Context) {
             vaultFile.delete()
             records.removeAll { it.id == vaultVideo.id }
             saveRecords(records)
+
+            // Force MediaStore scan so the restored video immediately appears in system gallery
+            try {
+                MediaScannerConnection.scanFile(
+                    context,
+                    arrayOf(restoredFile.absolutePath),
+                    arrayOf(record.mimeType.ifBlank { "video/*" }),
+                    null
+                )
+            } catch (_: Exception) {}
 
             Result.success(restoredFile)
         } catch (e: Exception) {

@@ -5,26 +5,15 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.VideoLibrary
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -33,34 +22,28 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.local.UserPreferences
 import com.example.data.local.UserPreferencesRepository
-import com.example.data.model.FolderItem
 import com.example.data.model.VideoItem
 import com.example.data.repository.VideoRepository
 import com.example.ui.components.PinLockScreen
+import com.example.ui.components.UpdateDialog
+import com.example.ui.components.UpdateInfo
+import com.example.ui.components.UpdateManager
+import com.example.ui.components.UpdateNotificationHelper
 import com.example.ui.screens.FolderDetailScreen
 import com.example.ui.screens.LibraryScreen
 import com.example.ui.screens.PlayerScreen
 import com.example.ui.screens.PrivateVaultScreen
 import com.example.ui.screens.SettingsScreen
-import com.example.ui.theme.AccentBlue
-import com.example.ui.theme.AccentCyan
 import com.example.ui.theme.AccentGreen
 import com.example.ui.theme.AccentOrange
 import com.example.ui.theme.AccentPink
 import com.example.ui.theme.AccentPurple
-import com.example.ui.theme.AmoledBlack
-import com.example.ui.theme.DarkTextPrimary
-import com.example.ui.theme.DarkTextSecondary
+import com.example.ui.theme.ProBlue
 import com.example.ui.theme.UltraPlayerTheme
 import kotlinx.coroutines.launch
 
@@ -85,6 +68,9 @@ class MainActivity : ComponentActivity() {
         videoRepository = VideoRepository(this)
         preferencesRepository = UserPreferencesRepository(this)
 
+        // Initialize update notification channel
+        UpdateNotificationHelper.createNotificationChannel(this)
+
         // Configure Coil with VideoFrameDecoder for thumbnail extraction
         val imageLoader = coil.ImageLoader.Builder(this)
             .components {
@@ -103,9 +89,9 @@ class MainActivity : ComponentActivity() {
                 "Purple" -> AccentPurple
                 "Green" -> AccentGreen
                 "Orange" -> AccentOrange
-                "Blue" -> com.example.ui.theme.ProBlue
+                "Blue" -> ProBlue
                 "Pink" -> AccentPink
-                else -> com.example.ui.theme.ProBlue
+                else -> ProBlue
             }
 
             UltraPlayerTheme(
@@ -173,7 +159,7 @@ fun UltraVideoApp(
         mutableStateOf(!userPreferences.isPinLockEnabled)
     }
 
-    // Permission state
+    // Media permission state
     val permissionToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         Manifest.permission.READ_MEDIA_VIDEO
     } else {
@@ -192,9 +178,45 @@ fun UltraVideoApp(
         hasPermission = granted
     }
 
+    // Notification permission on Android 13+
+    val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
     LaunchedEffect(Unit) {
         if (!hasPermission) {
             permissionLauncher.launch(permissionToRequest)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val hasNotif = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!hasNotif) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
+    // Update state & dialog
+    var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var updateDownloadProgress by remember { mutableStateOf(0f) }
+
+    // Background Update Check & System Notification
+    LaunchedEffect(userPreferences.autoCheckUpdates) {
+        if (userPreferences.autoCheckUpdates) {
+            coroutineScope.launch {
+                try {
+                    val info = UpdateManager.checkUpdate()
+                    if (info.hasUpdate) {
+                        availableUpdate = info
+                        showUpdateDialog = true
+                        UpdateNotificationHelper.showUpdateNotification(context, info)
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 
@@ -209,12 +231,23 @@ fun UltraVideoApp(
     // Navigation screen state
     var currentScreen by remember { mutableStateOf<Screen>(Screen.Library) }
 
-    // Handle incoming video VIEW intent
+    // Handle incoming video VIEW intent or update notification click
     LaunchedEffect(intent) {
         intent?.data?.let { uri ->
             if (intent.action == Intent.ACTION_VIEW) {
                 val openedVideo = videoRepository.getVideoMetadataFromUri(uri)
                 currentScreen = Screen.Player(listOf(openedVideo), 0)
+            }
+        }
+        if (intent?.getBooleanExtra(UpdateNotificationHelper.EXTRA_OPEN_UPDATE_DIALOG, false) == true) {
+            coroutineScope.launch {
+                val info = UpdateManager.checkUpdate()
+                if (info.hasUpdate) {
+                    availableUpdate = info
+                    showUpdateDialog = true
+                } else {
+                    currentScreen = Screen.Settings
+                }
             }
         }
     }
@@ -257,6 +290,7 @@ fun UltraVideoApp(
                 FolderDetailScreen(
                     folderName = screen.folderName,
                     videos = folderVideos,
+                    repository = videoRepository,
                     isGridView = userPreferences.isGridView,
                     onToggleGridView = {
                         coroutineScope.launch {
@@ -272,20 +306,8 @@ fun UltraVideoApp(
                             videoRepository.toggleFavorite(video)
                         }
                     },
-                    onDeleteVideo = { video ->
-                        coroutineScope.launch {
-                            videoRepository.deleteVideo(video)
-                        }
-                    },
-                    onLockToVault = { video ->
-                        coroutineScope.launch {
-                            if (!videoRepository.vaultManager.isPinConfigured()) {
-                                currentScreen = Screen.PrivateVault
-                            } else {
-                                videoRepository.vaultManager.lockVideo(video)
-                                videoRepository.notifyVideoDeleted(video.contentUriString)
-                            }
-                        }
+                    onOpenPrivateVault = {
+                        currentScreen = Screen.PrivateVault
                     },
                     onNavigateBack = {
                         currentScreen = Screen.Library
@@ -326,5 +348,38 @@ fun UltraVideoApp(
                 )
             }
         }
+    }
+
+    // Modern In-App Update Dialog
+    if (showUpdateDialog && availableUpdate != null) {
+        val updateInfo = availableUpdate!!
+        UpdateDialog(
+            updateInfo = updateInfo,
+            isDownloading = isDownloadingUpdate,
+            downloadProgress = updateDownloadProgress,
+            onDownloadAndInstall = {
+                isDownloadingUpdate = true
+                updateDownloadProgress = 0f
+                coroutineScope.launch {
+                    UpdateManager.downloadAndInstall(
+                        context = context,
+                        downloadUrl = updateInfo.downloadUrl,
+                        sha256Url = updateInfo.sha256Url,
+                        expectedSha256 = updateInfo.sha256Checksum,
+                        onProgress = { progress ->
+                            updateDownloadProgress = progress
+                        },
+                        onError = { err ->
+                            isDownloadingUpdate = false
+                            Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                        }
+                    )
+                    isDownloadingUpdate = false
+                }
+            },
+            onDismiss = {
+                showUpdateDialog = false
+            }
+        )
     }
 }
