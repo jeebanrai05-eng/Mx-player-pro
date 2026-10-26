@@ -605,6 +605,32 @@ fun SettingsScreen(
                             }
                         }
 
+                        // Keystore / Package conflict tip
+                        Card(
+                            shape = RoundedCornerShape(10.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                            modifier = Modifier.padding(top = 10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp).padding(top = 2.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Release Keystore Tip: If upgrading from a debug build displays 'Package conflicts with an existing package', please uninstall the old app version from your phone first. Subsequent updates signed with your Keystore will update automatically.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 15.sp
+                                )
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(12.dp))
                         TextButton(
                             onClick = { showAdvancedUpdateOptions = !showAdvancedUpdateOptions },

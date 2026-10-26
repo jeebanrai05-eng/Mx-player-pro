@@ -130,6 +130,7 @@ jobs:
           path: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/release/app-release.apk.sha256
+            version.json
           if-no-files-found: error
           retention-days: 30
 
@@ -165,6 +166,7 @@ jobs:
           files: |
             app/build/outputs/apk/release/app-release.apk
             app/build/outputs/apk/release/app-release.apk.sha256
+            version.json
           body: |
             ### 🚀 Ultra Video Player Pro Release ${{ steps.release_info.outputs.tag }} (v1.0.1)
             

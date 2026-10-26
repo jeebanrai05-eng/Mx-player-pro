@@ -87,14 +87,67 @@ object UpdateManager {
             }
         }
 
-        // Case 2: Query GitHub Releases API
+        // Strategy 1: Check version.json from raw GitHub (Instant & no GitHub API rate limits)
+        val rawVersionUrls = listOf(
+            "https://raw.githubusercontent.com/$repoOwner/$repoName/main/version.json",
+            "https://raw.githubusercontent.com/$repoOwner/$repoName/master/version.json"
+        )
+
+        for (vUrl in rawVersionUrls) {
+            try {
+                val rawJsonText = fetchRawText(vUrl)
+                if (!rawJsonText.isNullOrBlank()) {
+                    val vObj = JSONObject(rawJsonText)
+                    val remoteVersionName = vObj.optString("versionName", "").trim()
+                    val remoteVersionCode = vObj.optInt("versionCode", 0)
+                    val remoteTag = vObj.optString("releaseTag", if (remoteVersionName.startsWith("v")) remoteVersionName else "v$remoteVersionName").trim()
+                    val remoteTitle = vObj.optString("releaseTitle", "Ultra Video Player Pro $remoteVersionName")
+                    val remoteNotes = vObj.optString("releaseNotes", "Bug fixes and performance improvements.")
+                    val remoteApk = vObj.optString("apkUrl", "").trim()
+                    val remoteSha = vObj.optString("sha256", "").trim()
+
+                    val isNewer = (remoteVersionCode > currentVersionCode) ||
+                            isVersionOrBuildHigher(remoteTag, currentVersionName, currentVersionCode)
+
+                    if (isNewer && remoteApk.isNotEmpty()) {
+                        return@withContext UpdateInfo(
+                            hasUpdate = true,
+                            latestVersionName = if (remoteVersionName.isNotEmpty()) remoteVersionName else remoteTag,
+                            latestVersionCode = if (remoteVersionCode > 0) remoteVersionCode else currentVersionCode + 1,
+                            releaseTitle = remoteTitle,
+                            releaseNotes = remoteNotes,
+                            downloadUrl = remoteApk,
+                            sha256Url = "",
+                            sha256Checksum = remoteSha,
+                            fileSizeFormatted = "~28 MB",
+                            isPrivateRepoError = false
+                        )
+                    } else if (!isNewer) {
+                        return@withContext UpdateInfo(
+                            hasUpdate = false,
+                            latestVersionName = currentVersionName,
+                            latestVersionCode = currentVersionCode,
+                            releaseTitle = "Up to date",
+                            releaseNotes = "You are running the latest version (v$currentVersionName). No update required.",
+                            downloadUrl = "",
+                            sha256Url = "",
+                            sha256Checksum = "",
+                            fileSizeFormatted = "",
+                            isPrivateRepoError = false
+                        )
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+
+        // Strategy 2: Query GitHub Releases API
         val latestUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases/latest"
         val releasesListUrl = "https://api.github.com/repos/$repoOwner/$repoName/releases"
 
         var releaseJson: JSONObject? = null
         var isPrivateOr404 = false
 
-        // Attempt 1: Fetch releases/latest
+        // Attempt A: Fetch releases/latest
         try {
             val response = fetchGithubJson(latestUrl, githubToken)
             if (response != null) {
@@ -102,7 +155,7 @@ object UpdateManager {
             }
         } catch (_: Exception) {}
 
-        // Attempt 2: If latest is 404, fallback to /releases list (newest is index 0)
+        // Attempt B: If latest is 404, fallback to /releases list (newest is index 0)
         if (releaseJson == null) {
             try {
                 val response = fetchGithubJson(releasesListUrl, githubToken)
@@ -146,10 +199,6 @@ object UpdateManager {
                 }
             }
 
-            if (apkDownloadUrl.isEmpty()) {
-                apkDownloadUrl = "https://github.com/$repoOwner/$repoName/releases/download/$rawTag/app-release.apk"
-            }
-
             // Check if newer by semantic version or build number (e.g. v1.0.0-build.4 > build 1)
             val isNewer = isVersionOrBuildHigher(rawTag, currentVersionName, currentVersionCode)
 
@@ -159,22 +208,53 @@ object UpdateManager {
                 "~28 MB"
             }
 
-            UpdateInfo(
-                hasUpdate = isNewer,
-                latestVersionName = if (rawTag.isNotEmpty()) rawTag else currentVersionName,
-                latestVersionCode = currentVersionCode + if (isNewer) 1 else 0,
-                releaseTitle = releaseName,
-                releaseNotes = releaseBody,
-                downloadUrl = apkDownloadUrl,
-                sha256Url = sha256DownloadUrl,
-                sha256Checksum = "",
-                fileSizeFormatted = formattedSize,
-                isPrivateRepoError = false
-            )
+            if (isNewer) {
+                if (apkDownloadUrl.isNotEmpty()) {
+                    UpdateInfo(
+                        hasUpdate = true,
+                        latestVersionName = if (rawTag.isNotEmpty()) rawTag else currentVersionName,
+                        latestVersionCode = currentVersionCode + 1,
+                        releaseTitle = releaseName,
+                        releaseNotes = releaseBody,
+                        downloadUrl = apkDownloadUrl,
+                        sha256Url = sha256DownloadUrl,
+                        sha256Checksum = "",
+                        fileSizeFormatted = formattedSize,
+                        isPrivateRepoError = false
+                    )
+                } else {
+                    // Release exists but APK asset has not been uploaded yet or is building
+                    UpdateInfo(
+                        hasUpdate = false,
+                        latestVersionName = currentVersionName,
+                        latestVersionCode = currentVersionCode,
+                        releaseTitle = "Release $rawTag detected",
+                        releaseNotes = "New release $rawTag found on GitHub, but APK package is still being generated by GitHub Actions. Please try again in 1-2 minutes.",
+                        downloadUrl = "",
+                        sha256Url = "",
+                        sha256Checksum = "",
+                        fileSizeFormatted = "",
+                        isPrivateRepoError = false
+                    )
+                }
+            } else {
+                UpdateInfo(
+                    hasUpdate = false,
+                    latestVersionName = currentVersionName,
+                    latestVersionCode = currentVersionCode,
+                    releaseTitle = "Up to date",
+                    releaseNotes = "You are running the latest version (v$currentVersionName). No update required.",
+                    downloadUrl = "",
+                    sha256Url = "",
+                    sha256Checksum = "",
+                    fileSizeFormatted = "",
+                    isPrivateRepoError = false
+                )
+            }
         } else {
             // Repo is private or release not found
             val explanation = if (isPrivateOr404) {
-                "Notice: Repository '$repoOwner/$repoName' is Private (HTTP 404).\n\nGitHub does not permit anonymous release downloads for private repositories.\n\nTo enable automatic updates:\n1. In GitHub, go to Settings -> General -> Danger Zone -> Change repository visibility -> Make public.\n2. Or paste your release tag link (e.g. https://github.com/$repoOwner/$repoName/releases/tag/v1.0.0-build.4) in the custom link field below."
+                "You are running version v$currentVersionName.\n\nNote: GitHub returned 404 for repository '$repoOwner/$repoName'. If you are setting up releases, make sure the repository is Public in GitHub Settings so APK releases can be downloaded."
             } else {
                 "You are running the latest version (v$currentVersionName)."
             }
@@ -183,7 +263,7 @@ object UpdateManager {
                 hasUpdate = false,
                 latestVersionName = currentVersionName,
                 latestVersionCode = currentVersionCode,
-                releaseTitle = if (isPrivateOr404) "Private Repository Notice" else "Current Version",
+                releaseTitle = if (isPrivateOr404) "Notice" else "Up to date",
                 releaseNotes = explanation,
                 downloadUrl = "", // Empty so users don't trigger broken 404 downloads
                 sha256Url = "",
@@ -191,6 +271,28 @@ object UpdateManager {
                 fileSizeFormatted = "",
                 isPrivateRepoError = isPrivateOr404
             )
+        }
+    }
+
+    private fun fetchRawText(urlStr: String): String? {
+        var connection: HttpURLConnection? = null
+        return try {
+            val url = URL(urlStr)
+            connection = url.openConnection() as HttpURLConnection
+            connection.connectTimeout = 8000
+            connection.readTimeout = 8000
+            connection.setRequestProperty("User-Agent", "UltraVideoPlayer-Android")
+            connection.connect()
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val reader = BufferedReader(InputStreamReader(connection.inputStream))
+                reader.use { it.readText() }
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        } finally {
+            connection?.disconnect()
         }
     }
 
