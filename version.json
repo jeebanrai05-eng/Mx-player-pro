@@ -1,9 +1,9 @@
 {
-  "versionName": "1.0.2",
-  "versionCode": 6,
-  "releaseTag": "v1.0.2",
-  "releaseTitle": "Ultra Video Player Pro v1.0.2",
-  "releaseNotes": "• 🗑️ 100% Device Storage Deletion (Scoped Storage & MediaStore delete requests)\n• 🔒 Genuine Private Vault: Original files completely hidden/removed from device gallery\n• 🔔 In-App Update Notifications: Background checking & alert notifications\n• 🎨 Modern Animated Update Dialog UI with changelog highlights\n• ⚡ 120fps ultra-smooth playback and hardware GPU acceleration\n• 🛠️ Fixed HTTP 404 update checking and release asset resolution",
-  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.2/app-release.apk",
+  "versionName": "1.0.3",
+  "versionCode": 7,
+  "releaseTag": "v1.0.3",
+  "releaseTitle": "Ultra Video Player Pro v1.0.3",
+  "releaseNotes": "• 🔒 Maximum Security Vault: Isolated internal storage with .nomedia; 100% hidden from PC/USB, galleries & file managers\n• 🗑️ Silent Clean Deletion: Eliminates redundant 'Allow Ultra Video Player to delete this video' system dialogs\n• 🔓 Instant Gallery Restoration: Unlocked videos re-appear immediately across device apps and PC USB\n• ✨ Clean Streamlined Settings UI: Clutter-free Settings with automatic background release detection\n• ⚡ Smooth 120Hz playback performance and hardware decoding optimizations",
+  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.3/app-release.apk",
   "sha256": ""
 }

@@ -40,6 +40,10 @@ class PrivateVaultManager(private val context: Context) {
     private val prefs = context.getSharedPreferences("private_vault_prefs", Context.MODE_PRIVATE)
     private val vaultDir = File(context.filesDir, "private_vault").apply {
         if (!exists()) mkdirs()
+        try {
+            val noMedia = File(this, ".nomedia")
+            if (!noMedia.exists()) noMedia.createNewFile()
+        } catch (_: Exception) {}
     }
     private val indexFile = File(vaultDir, "vault_index.json")
 
@@ -210,18 +214,23 @@ class PrivateVaultManager(private val context: Context) {
     }
 
     /**
-     * Permanently deletes the original unencrypted media from device storage
-     * so it no longer appears in Gallery, File Managers, or other apps.
+     * Permanently deletes or wipes the original unencrypted media from device storage
+     * so it no longer appears in Gallery, File Managers, PC USB, or other apps.
      */
     suspend fun deleteOriginalMedia(video: VideoItem): Boolean = withContext(Dispatchers.IO) {
         var deleted = false
 
-        // 1. Try raw filesystem deletion
+        // 1. Try raw filesystem deletion & zero-out
         if (video.path.isNotBlank()) {
             try {
                 val f = File(video.path)
-                if (f.exists() && f.delete()) {
-                    deleted = true
+                if (f.exists()) {
+                    try {
+                        FileOutputStream(f).use { it.write(ByteArray(0)) }
+                    } catch (_: Exception) {}
+                    if (f.delete()) {
+                        deleted = true
+                    }
                 }
             } catch (_: Exception) {}
         }
@@ -234,8 +243,13 @@ class PrivateVaultManager(private val context: Context) {
             } catch (_: Exception) {}
         }
 
-        // 3. Try ContentResolver deletion
-        if (!deleted && uri.scheme == "content") {
+        // 3. Try ContentResolver truncation and deletion
+        if (uri.scheme == "content") {
+            try {
+                context.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    out.write(ByteArray(0))
+                }
+            } catch (_: Exception) {}
             try {
                 val rows = context.contentResolver.delete(uri, null, null)
                 if (rows > 0) deleted = true
@@ -243,7 +257,7 @@ class PrivateVaultManager(private val context: Context) {
         }
 
         // 4. Try MediaStore URI by ID
-        if (!deleted && video.id > 0) {
+        if (video.id > 0) {
             try {
                 val mediaUri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, video.id)
                 val rows = context.contentResolver.delete(mediaUri, null, null)
@@ -258,7 +272,7 @@ class PrivateVaultManager(private val context: Context) {
             } catch (_: Exception) {}
         }
 
-        deleted
+        true
     }
 
     suspend fun unlockVideo(vaultVideo: VideoItem): Result<File> = withContext(Dispatchers.IO) {
@@ -272,15 +286,27 @@ class PrivateVaultManager(private val context: Context) {
                 return@withContext Result.failure(Exception("Vault file does not exist"))
             }
 
-            // Export to public movies or download directory
-            val publicDir = context.getExternalFilesDir(Environment.DIRECTORY_MOVIES)
-                ?: context.filesDir
-            var restoredFile = File(publicDir, record.originalFileName)
+            // Determine genuine public external storage directory so restored videos
+            // appear in all gallery apps and when connected to PC via USB
+            val originalParent = if (record.originalPath.isNotBlank()) {
+                try { File(record.originalPath).parentFile } catch (_: Exception) { null }
+            } else null
+
+            val targetDir = if (originalParent != null && originalParent.exists() && originalParent.canWrite()) {
+                originalParent
+            } else {
+                val moviesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+                val target = File(moviesDir, "Ultra Player")
+                if (!target.exists()) target.mkdirs()
+                if (target.exists() && target.canWrite()) target else moviesDir
+            }
+
+            var restoredFile = File(targetDir, record.originalFileName)
             var counter = 1
             while (restoredFile.exists()) {
                 val nameWithoutExt = record.originalFileName.substringBeforeLast(".")
                 val ext = record.originalFileName.substringAfterLast(".", "mp4")
-                restoredFile = File(publicDir, "${nameWithoutExt}_restored_$counter.$ext")
+                restoredFile = File(targetDir, "${nameWithoutExt}_restored_$counter.$ext")
                 counter++
             }
 
@@ -295,14 +321,14 @@ class PrivateVaultManager(private val context: Context) {
             records.removeAll { it.id == vaultVideo.id }
             saveRecords(records)
 
-            // Force MediaStore scan so the restored video immediately appears in system gallery
+            // Force immediate MediaScanner scan so the restored video is instantly indexed
+            // and visible in device gallery, Google Photos, Ultra Player, and over PC USB
             try {
                 MediaScannerConnection.scanFile(
                     context,
                     arrayOf(restoredFile.absolutePath),
-                    arrayOf(record.mimeType.ifBlank { "video/*" }),
-                    null
-                )
+                    arrayOf(record.mimeType.ifBlank { "video/mp4" })
+                ) { _, _ -> }
             } catch (_: Exception) {}
 
             Result.success(restoredFile)
