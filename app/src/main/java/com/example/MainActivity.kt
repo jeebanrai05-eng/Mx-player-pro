@@ -317,6 +317,9 @@ fun UltraVideoApp(
                     },
                     onNavigateBack = {
                         currentScreen = Screen.Library
+                    },
+                    onOpenSettings = {
+                        currentScreen = Screen.Settings
                     }
                 )
             }

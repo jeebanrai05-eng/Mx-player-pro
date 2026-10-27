@@ -65,6 +65,7 @@ fun VideoCard(
     onRemoveHistory: (() -> Unit)? = null,
     onDeleteClick: (() -> Unit)? = null,
     onLockToVault: (() -> Unit)? = null,
+    onOptionsClick: ((VideoItem) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (isGrid) {
@@ -76,6 +77,7 @@ fun VideoCard(
             onRemoveHistory = onRemoveHistory,
             onDeleteClick = onDeleteClick,
             onLockToVault = onLockToVault,
+            onOptionsClick = onOptionsClick,
             modifier = modifier
         )
     } else {
@@ -87,6 +89,7 @@ fun VideoCard(
             onRemoveHistory = onRemoveHistory,
             onDeleteClick = onDeleteClick,
             onLockToVault = onLockToVault,
+            onOptionsClick = onOptionsClick,
             modifier = modifier
         )
     }
@@ -101,6 +104,7 @@ fun VideoListCard(
     onRemoveHistory: (() -> Unit)?,
     onDeleteClick: (() -> Unit)? = null,
     onLockToVault: (() -> Unit)? = null,
+    onOptionsClick: ((VideoItem) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -275,7 +279,13 @@ fun VideoListCard(
             // Overflow Menu
             Box {
                 IconButton(
-                    onClick = { menuExpanded = true },
+                    onClick = {
+                        if (onOptionsClick != null) {
+                            onOptionsClick(video)
+                        } else {
+                            menuExpanded = true
+                        }
+                    },
                     modifier = Modifier.size(36.dp)
                 ) {
                     Icon(
@@ -375,6 +385,7 @@ fun VideoGridCard(
     onRemoveHistory: (() -> Unit)?,
     onDeleteClick: (() -> Unit)? = null,
     onLockToVault: (() -> Unit)? = null,
+    onOptionsClick: ((VideoItem) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -504,7 +515,13 @@ fun VideoGridCard(
 
                 Box {
                     IconButton(
-                        onClick = { menuExpanded = true },
+                        onClick = {
+                            if (onOptionsClick != null) {
+                                onOptionsClick(video)
+                            } else {
+                                menuExpanded = true
+                            }
+                        },
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(

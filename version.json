@@ -1,9 +1,9 @@
 {
-  "versionName": "1.0.4",
-  "versionCode": 8,
-  "releaseTag": "v1.0.4",
-  "releaseTitle": "Ultra Video Player Pro v1.0.4",
-  "releaseNotes": "• 🎦 Cinematic Video Player UI: Floating glassmorphic dock bar with Fit Screen, Tracks, 1.0x Speed, Sleep Timer, and Quality/HDR+ pills\n• ⚡ Glowing Electric Cyan-Blue Seeker: Custom hardware-drawn progress line with halo thumb and live scrubbing preview\n• 🔆 Left-Edge Vertical Brightness Line: Sleek glassmorphic vertical swipe HUD with sun icon and glowing blue line\n• 🔊 Right-Edge Vertical Volume Line: Sleek glassmorphic vertical swipe HUD with speaker icon and glowing blue line\n• 🌈 True HDR & HDR10+ Support: 10-bit BT.2020 wide color gamut, hardware-accelerated SurfaceView decoding, and Vivid Brightness Boost\n• 🔄 Auto-Rotate on Click: Instantly plays in full-screen sensor landscape mode\n• 🔒 Maximum Security Isolated Private Vault: Hidden from PC USB, file managers & media scanners\n• 🗑️ Silent Clean Media Deletion without redundant system permission popups",
-  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.4/app-release.apk",
+  "versionName": "1.0.5",
+  "versionCode": 9,
+  "releaseTag": "v1.0.5",
+  "releaseTitle": "Ultra Video Player Pro v1.0.5",
+  "releaseNotes": "• 🎛️ Complete 10-Option Video Action Bottom Sheet: Modern modal with colorful professional icons for Favourite, Add To Playlist, File Transfer, Lock in Private Folder, Convert to MP3, Share, Rename, Cut, Properties, and Delete\n• 🔝 Top Bar & Down Bar Navigation: Unified TopAppBar with back/search/view-toggle and 5-tab Bottom Navigation (Home, Folders, My List, Private, Settings) across folder views and screens\n• 🛡️ Crash Fix in Favorites (My List): Resolved duplicate key exception when videos exist in both Favorites and Watch History\n• ⚪ Clean Modern White UI: Ultra-crisp background with high-contrast typography, duration thumbnail badges, and sleek overflow buttons\n• 🎦 Cinematic Video Player & HDR+: Glassmorphic dock bar, glowing electric blue seeker line, left vertical brightness HUD, right vertical volume HUD, and hardware-accelerated HDR/HDR10+ decoding",
+  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.5/app-release.apk",
   "sha256": ""
 }

@@ -249,6 +249,7 @@ class VideoRepository(private val context: Context) {
                     val record = recordMap[video.contentUriString]
                     if (record != null) {
                         video.copy(
+                            title = if (record.title.isNotBlank()) record.title else video.title,
                             playbackPosition = record.playbackPosition,
                             isFavorite = record.isFavorite,
                             lastPlayedTimestamp = record.lastPlayedTimestamp
@@ -258,6 +259,22 @@ class VideoRepository(private val context: Context) {
                     }
                 }
         }.flowOn(Dispatchers.IO)
+    }
+
+    suspend fun renameVideo(video: VideoItem, newTitle: String) = withContext(Dispatchers.IO) {
+        val currentRecord = videoDao.getRecordByUri(video.contentUriString)
+        videoDao.insertOrUpdate(
+            VideoEntity(
+                uri = video.contentUriString,
+                title = newTitle,
+                playbackPosition = currentRecord?.playbackPosition ?: video.playbackPosition,
+                duration = currentRecord?.duration ?: video.duration,
+                isFavorite = currentRecord?.isFavorite ?: video.isFavorite,
+                lastPlayedTimestamp = currentRecord?.lastPlayedTimestamp ?: video.lastPlayedTimestamp,
+                folderName = video.folderName
+            )
+        )
+        requestRefresh()
     }
 
     suspend fun savePlaybackPosition(video: VideoItem, positionMs: Long) {

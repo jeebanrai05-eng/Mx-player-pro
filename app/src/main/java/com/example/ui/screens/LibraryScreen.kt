@@ -114,6 +114,7 @@ import com.example.ui.components.ExploreOnlineSheet
 import com.example.ui.components.FolderCard
 import com.example.ui.components.VideoCard
 import com.example.ui.components.VideoInfoDialog
+import com.example.ui.components.VideoOptionsBottomSheet
 import com.example.ui.theme.ProBlue
 import com.example.ui.theme.ProBlueDark
 import com.example.ui.theme.StatusRed
@@ -157,6 +158,7 @@ fun LibraryScreen(
     var showSortMenu by remember { mutableStateOf(false) }
     var showExploreOnlineSheet by remember { mutableStateOf(false) }
     var selectedVideoForInfo by remember { mutableStateOf<VideoItem?>(null) }
+    var selectedVideoForOptions by remember { mutableStateOf<VideoItem?>(null) }
 
     if (activeBottomNav != BottomNavTab.FOLDERS) {
         BackHandler {
@@ -629,7 +631,8 @@ fun LibraryScreen(
                         onToggleFavorite = { vid -> coroutineScope.launch { repository.toggleFavorite(vid) } },
                         onShowInfo = { vid -> selectedVideoForInfo = vid },
                         onDeleteClick = { onDeleteRequested(it) },
-                        onLockToVault = { onLockToVaultRequested(it) }
+                        onLockToVault = { onLockToVaultRequested(it) },
+                        onOptionsClick = { selectedVideoForOptions = it }
                     )
                 }
                 // When Folders pill is active
@@ -750,7 +753,8 @@ fun LibraryScreen(
                                     onToggleFavorite = { coroutineScope.launch { repository.toggleFavorite(video) } },
                                     onShowInfo = { selectedVideoForInfo = video },
                                     onDeleteClick = { onDeleteRequested(video) },
-                                    onLockToVault = { onLockToVaultRequested(video) }
+                                    onLockToVault = { onLockToVaultRequested(video) },
+                                    onOptionsClick = { selectedVideoForOptions = video }
                                 )
                             }
                         }
@@ -769,7 +773,8 @@ fun LibraryScreen(
                                     onToggleFavorite = { coroutineScope.launch { repository.toggleFavorite(video) } },
                                     onShowInfo = { selectedVideoForInfo = video },
                                     onDeleteClick = { onDeleteRequested(video) },
-                                    onLockToVault = { onLockToVaultRequested(video) }
+                                    onLockToVault = { onLockToVaultRequested(video) },
+                                    onOptionsClick = { selectedVideoForOptions = video }
                                 )
                             }
                         }
@@ -876,6 +881,34 @@ fun LibraryScreen(
                     }
                 )
             }
+
+            // Video Options Bottom Sheet (10 Actions)
+            if (selectedVideoForOptions != null) {
+                VideoOptionsBottomSheet(
+                    video = selectedVideoForOptions!!,
+                    onDismissRequest = { selectedVideoForOptions = null },
+                    onToggleFavorite = {
+                        val v = selectedVideoForOptions ?: return@VideoOptionsBottomSheet
+                        coroutineScope.launch { repository.toggleFavorite(v) }
+                    },
+                    onLockToVault = {
+                        val v = selectedVideoForOptions ?: return@VideoOptionsBottomSheet
+                        onLockToVaultRequested(v)
+                    },
+                    onShowProperties = {
+                        val v = selectedVideoForOptions ?: return@VideoOptionsBottomSheet
+                        selectedVideoForInfo = v
+                    },
+                    onDeleteRequested = {
+                        val v = selectedVideoForOptions ?: return@VideoOptionsBottomSheet
+                        onDeleteRequested(v)
+                    },
+                    onRenameVideo = { newTitle ->
+                        val v = selectedVideoForOptions ?: return@VideoOptionsBottomSheet
+                        coroutineScope.launch { repository.renameVideo(v, newTitle) }
+                    }
+                )
+            }
         }
     }
 }
@@ -889,7 +922,8 @@ private fun MyListContent(
     onToggleFavorite: (VideoItem) -> Unit,
     onShowInfo: (VideoItem) -> Unit,
     onDeleteClick: (VideoItem) -> Unit,
-    onLockToVault: (VideoItem) -> Unit
+    onLockToVault: (VideoItem) -> Unit,
+    onOptionsClick: (VideoItem) -> Unit
 ) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -914,7 +948,7 @@ private fun MyListContent(
                 )
             }
         } else {
-            items(favoriteVideos, key = { it.id }) { video ->
+            items(favoriteVideos, key = { "fav_${it.id}" }) { video ->
                 VideoCard(
                     video = video,
                     isGrid = false,
@@ -925,7 +959,8 @@ private fun MyListContent(
                     onToggleFavorite = { onToggleFavorite(video) },
                     onShowInfo = { onShowInfo(video) },
                     onDeleteClick = { onDeleteClick(video) },
-                    onLockToVault = { onLockToVault(video) }
+                    onLockToVault = { onLockToVault(video) },
+                    onOptionsClick = { onOptionsClick(video) }
                 )
             }
         }
@@ -949,7 +984,7 @@ private fun MyListContent(
                 )
             }
         } else {
-            items(recentVideos, key = { it.id }) { video ->
+            items(recentVideos, key = { "rec_${it.id}" }) { video ->
                 VideoCard(
                     video = video,
                     isGrid = false,
@@ -960,7 +995,8 @@ private fun MyListContent(
                     onToggleFavorite = { onToggleFavorite(video) },
                     onShowInfo = { onShowInfo(video) },
                     onDeleteClick = { onDeleteClick(video) },
-                    onLockToVault = { onLockToVault(video) }
+                    onLockToVault = { onLockToVault(video) },
+                    onOptionsClick = { onOptionsClick(video) }
                 )
             }
         }
