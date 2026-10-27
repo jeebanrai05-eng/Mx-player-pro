@@ -5,6 +5,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,19 +34,24 @@ import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.ProBlue
 
 sealed class GestureOverlayType {
     object None : GestureOverlayType()
@@ -58,198 +67,281 @@ fun GestureFeedbackOverlay(
     modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
+        modifier = modifier.fillMaxSize()
     ) {
+        // Left Side: Sleek Vertical Brightness Line HUD
         AnimatedVisibility(
-            visible = overlayType !is GestureOverlayType.None,
-            enter = fadeIn() + scaleIn(initialScale = 0.82f),
-            exit = fadeOut() + scaleOut(targetScale = 0.82f)
+            visible = overlayType is GestureOverlayType.Brightness,
+            enter = fadeIn() + slideInHorizontally(initialOffsetX = { -it / 2 }),
+            exit = fadeOut() + slideOutHorizontally(targetOffsetX = { -it / 2 }),
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 28.dp)
         ) {
-            when (overlayType) {
-                is GestureOverlayType.Volume -> {
-                    VolumeFeedbackPill(percentage = overlayType.percentage)
-                }
-                is GestureOverlayType.Brightness -> {
-                    BrightnessFeedbackPill(percentage = overlayType.percentage)
-                }
-                is GestureOverlayType.Scrubbing -> {
-                    ScrubbingFeedbackPill(
-                        targetMs = overlayType.targetPositionMs,
-                        deltaSec = overlayType.deltaSeconds,
-                        totalMs = overlayType.totalDurationMs
-                    )
-                }
-                is GestureOverlayType.DoubleTapSeek -> {
-                    DoubleTapSeekPulse(
-                        isForward = overlayType.isForward,
-                        seconds = overlayType.seekSeconds
-                    )
-                }
-                is GestureOverlayType.None -> Unit
+            if (overlayType is GestureOverlayType.Brightness) {
+                VerticalBrightnessBar(percentage = overlayType.percentage)
             }
         }
-    }
-}
 
-@Composable
-private fun VolumeFeedbackPill(percentage: Int) {
-    val fillFraction = (percentage / 100f).coerceIn(0f, 1f)
-
-    Box(
-        modifier = Modifier
-            .shadow(16.dp, RoundedCornerShape(24.dp))
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xEE0B111E))
-            .border(1.5.dp, Brush.verticalGradient(listOf(Color(0x663B82F6), Color(0x221E293B))), RoundedCornerShape(24.dp))
-            .padding(horizontal = 26.dp, vertical = 20.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        // Right Side: Sleek Vertical Volume Line HUD
+        AnimatedVisibility(
+            visible = overlayType is GestureOverlayType.Volume,
+            enter = fadeIn() + slideInHorizontally(initialOffsetX = { it / 2 }),
+            exit = fadeOut() + slideOutHorizontally(targetOffsetX = { it / 2 }),
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 28.dp)
         ) {
-            val icon = when {
-                percentage <= 0 -> Icons.Default.VolumeMute
-                percentage < 40 -> Icons.Default.VolumeDown
-                else -> Icons.Default.VolumeUp
+            if (overlayType is GestureOverlayType.Volume) {
+                VerticalVolumeBar(percentage = overlayType.percentage)
             }
+        }
 
-            Box(
-                modifier = Modifier
-                    .size(54.dp)
-                    .clip(CircleShape)
-                    .background(Color(0x331E60FF)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = "Volume",
-                    tint = Color(0xFF60A5FA),
-                    modifier = Modifier.size(30.dp)
+        // Center: Scrubbing Pill
+        AnimatedVisibility(
+            visible = overlayType is GestureOverlayType.Scrubbing,
+            enter = fadeIn() + scaleIn(initialScale = 0.85f),
+            exit = fadeOut() + scaleOut(targetScale = 0.85f),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            if (overlayType is GestureOverlayType.Scrubbing) {
+                ScrubbingFeedbackPill(
+                    targetMs = overlayType.targetPositionMs,
+                    deltaSec = overlayType.deltaSeconds,
+                    totalMs = overlayType.totalDurationMs
                 )
             }
+        }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Text(
-                text = "Volume",
-                color = Color(0xFF94A3B8),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
-            )
-
-            Text(
-                text = "$percentage%",
-                color = Color.White,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold,
-                fontFamily = FontFamily.SansSerif
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Modern glowing progress track
-            Box(
-                modifier = Modifier
-                    .width(130.dp)
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0x33FFFFFF))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fillFraction)
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xFF38BDF8), Color(0xFF1E60FF))
-                            )
-                        )
+        // Double-Tap Seek Pulse (Left or Right)
+        AnimatedVisibility(
+            visible = overlayType is GestureOverlayType.DoubleTapSeek,
+            enter = fadeIn() + scaleIn(initialScale = 0.85f),
+            exit = fadeOut() + scaleOut(targetScale = 0.85f),
+            modifier = Modifier.align(
+                if (overlayType is GestureOverlayType.DoubleTapSeek && overlayType.isForward) {
+                    Alignment.CenterEnd
+                } else {
+                    Alignment.CenterStart
+                }
+            ).padding(horizontal = 60.dp)
+        ) {
+            if (overlayType is GestureOverlayType.DoubleTapSeek) {
+                DoubleTapSeekPulse(
+                    isForward = overlayType.isForward,
+                    seconds = overlayType.seekSeconds
                 )
             }
         }
     }
 }
 
+/**
+ * Modern Left-side Vertical Brightness HUD with glowing electric blue track line
+ */
 @Composable
-private fun BrightnessFeedbackPill(percentage: Int) {
-    val fillFraction = (percentage / 100f).coerceIn(0f, 1f)
+private fun VerticalBrightnessBar(percentage: Int) {
+    val fraction = (percentage / 100f).coerceIn(0f, 1f)
+
+    val icon = when {
+        percentage < 33 -> Icons.Default.BrightnessLow
+        percentage < 66 -> Icons.Default.BrightnessMedium
+        else -> Icons.Default.BrightnessHigh
+    }
 
     Box(
         modifier = Modifier
             .shadow(16.dp, RoundedCornerShape(24.dp))
             .clip(RoundedCornerShape(24.dp))
-            .background(Color(0xEE0B111E))
-            .border(1.5.dp, Brush.verticalGradient(listOf(Color(0x66F59E0B), Color(0x221E293B))), RoundedCornerShape(24.dp))
-            .padding(horizontal = 26.dp, vertical = 20.dp),
+            .background(Color(0xDD0A0F1E))
+            .border(1.dp, Brush.verticalGradient(listOf(Color(0x6600E5FF), Color(0x221E293B))), RoundedCornerShape(24.dp))
+            .padding(horizontal = 12.dp, vertical = 14.dp)
+            .testTag("vertical_brightness_hud"),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            val icon = when {
-                percentage < 33 -> Icons.Default.BrightnessLow
-                percentage < 66 -> Icons.Default.BrightnessMedium
-                else -> Icons.Default.BrightnessHigh
-            }
-
+            // Icon
             Box(
                 modifier = Modifier
-                    .size(54.dp)
+                    .size(34.dp)
                     .clip(CircleShape)
-                    .background(Color(0x33F59E0B)),
+                    .background(Color(0x2200E5FF)),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = "Brightness",
-                    tint = Color(0xFFFBBF24),
-                    modifier = Modifier.size(30.dp)
+                    tint = Color(0xFF00E5FF),
+                    modifier = Modifier.size(19.dp)
                 )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            Text(
-                text = "Brightness",
-                color = Color(0xFF94A3B8),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
-            )
+            // Vertical glowing blue line track
+            Canvas(
+                modifier = Modifier
+                    .width(8.dp)
+                    .height(105.dp)
+            ) {
+                val trackWidth = size.width
+                val trackHeight = size.height
+                val cornerRadius = CornerRadius(trackWidth / 2f, trackWidth / 2f)
 
+                // Unfilled track
+                drawRoundRect(
+                    color = Color(0x35FFFFFF),
+                    topLeft = Offset(0f, 0f),
+                    size = Size(trackWidth, trackHeight),
+                    cornerRadius = cornerRadius
+                )
+
+                // Filled track from bottom up
+                val filledHeight = trackHeight * fraction
+                val filledTop = trackHeight - filledHeight
+
+                if (filledHeight > 0f) {
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            listOf(Color(0xFF00E5FF), Color(0xFF0066FF))
+                        ),
+                        topLeft = Offset(0f, filledTop),
+                        size = Size(trackWidth, filledHeight),
+                        cornerRadius = cornerRadius
+                    )
+
+                    // Glowing bead at level position
+                    drawCircle(
+                        color = Color.White,
+                        radius = 4.5.dp.toPx(),
+                        center = Offset(trackWidth / 2f, filledTop)
+                    )
+                    drawCircle(
+                        color = Color(0x5500E5FF),
+                        radius = 7.dp.toPx(),
+                        center = Offset(trackWidth / 2f, filledTop)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Percentage
             Text(
                 text = "$percentage%",
                 color = Color.White,
-                fontSize = 22.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = FontFamily.SansSerif
             )
+        }
+    }
+}
 
-            Spacer(modifier = Modifier.height(12.dp))
+/**
+ * Modern Right-side Vertical Volume HUD with glowing electric blue track line
+ */
+@Composable
+private fun VerticalVolumeBar(percentage: Int) {
+    val fraction = (percentage / 100f).coerceIn(0f, 1f)
 
-            // Glowing amber progress track
+    val icon = when {
+        percentage <= 0 -> Icons.Default.VolumeMute
+        percentage < 40 -> Icons.Default.VolumeDown
+        else -> Icons.Default.VolumeUp
+    }
+
+    Box(
+        modifier = Modifier
+            .shadow(16.dp, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xDD0A0F1E))
+            .border(1.dp, Brush.verticalGradient(listOf(Color(0x660084FF), Color(0x221E293B))), RoundedCornerShape(24.dp))
+            .padding(horizontal = 12.dp, vertical = 14.dp)
+            .testTag("vertical_volume_hud"),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // Icon
             Box(
                 modifier = Modifier
-                    .width(130.dp)
-                    .height(8.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(Color(0x33FFFFFF))
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x220084FF)),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fillFraction)
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xFFFDE68A), Color(0xFFF59E0B))
-                            )
-                        )
+                Icon(
+                    imageVector = icon,
+                    contentDescription = "Volume",
+                    tint = Color(0xFF38BDF8),
+                    modifier = Modifier.size(19.dp)
                 )
             }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Vertical glowing blue line track
+            Canvas(
+                modifier = Modifier
+                    .width(8.dp)
+                    .height(105.dp)
+            ) {
+                val trackWidth = size.width
+                val trackHeight = size.height
+                val cornerRadius = CornerRadius(trackWidth / 2f, trackWidth / 2f)
+
+                // Unfilled track
+                drawRoundRect(
+                    color = Color(0x35FFFFFF),
+                    topLeft = Offset(0f, 0f),
+                    size = Size(trackWidth, trackHeight),
+                    cornerRadius = cornerRadius
+                )
+
+                // Filled track from bottom up
+                val filledHeight = trackHeight * fraction
+                val filledTop = trackHeight - filledHeight
+
+                if (filledHeight > 0f) {
+                    drawRoundRect(
+                        brush = Brush.verticalGradient(
+                            listOf(Color(0xFF38BDF8), Color(0xFF0052FF))
+                        ),
+                        topLeft = Offset(0f, filledTop),
+                        size = Size(trackWidth, filledHeight),
+                        cornerRadius = cornerRadius
+                    )
+
+                    // Glowing bead at level position
+                    drawCircle(
+                        color = Color.White,
+                        radius = 4.5.dp.toPx(),
+                        center = Offset(trackWidth / 2f, filledTop)
+                    )
+                    drawCircle(
+                        color = Color(0x550084FF),
+                        radius = 7.dp.toPx(),
+                        center = Offset(trackWidth / 2f, filledTop)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Percentage
+            Text(
+                text = "$percentage%",
+                color = Color.White,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.SansSerif
+            )
         }
     }
 }
@@ -259,77 +351,46 @@ private fun ScrubbingFeedbackPill(targetMs: Long, deltaSec: Int, totalMs: Long) 
     val sign = if (deltaSec >= 0) "+" else ""
     val formattedTarget = formatMs(targetMs)
     val formattedTotal = formatMs(totalMs)
-    val progressFraction = if (totalMs > 0) (targetMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f) else 0f
 
     Box(
         modifier = Modifier
-            .shadow(20.dp, RoundedCornerShape(22.dp))
-            .clip(RoundedCornerShape(22.dp))
-            .background(Color(0xF00A0F1D))
-            .border(1.5.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(22.dp))
-            .padding(horizontal = 28.dp, vertical = 18.dp),
-        contentAlignment = Alignment.Center
+            .shadow(16.dp, RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color(0xEE0B111E))
+            .border(1.dp, Brush.horizontalGradient(listOf(Color(0xFF00E5FF), Color(0xFF0066FF))), RoundedCornerShape(20.dp))
+            .padding(horizontal = 22.dp, vertical = 12.dp)
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(Color(0x3338BDF8)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = if (deltaSec >= 0) Icons.Default.FastForward else Icons.Default.FastRewind,
-                        contentDescription = null,
-                        tint = Color(0xFF38BDF8),
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
+                Icon(
+                    imageVector = if (deltaSec >= 0) Icons.Default.FastForward else Icons.Default.FastRewind,
+                    contentDescription = null,
+                    tint = Color(0xFF00E5FF),
+                    modifier = Modifier.size(24.dp)
+                )
 
                 Text(
                     text = "$sign${deltaSec}s",
-                    color = Color(0xFF38BDF8),
-                    fontSize = 20.sp,
+                    color = Color(0xFF00E5FF),
+                    fontSize = 17.sp,
                     fontWeight = FontWeight.ExtraBold
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = "$formattedTarget / $formattedTotal",
                 color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold
             )
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Mini scrubbing scrub bar
-            Box(
-                modifier = Modifier
-                    .width(160.dp)
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0x44FFFFFF))
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progressFraction)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xFF38BDF8), ProBlue)
-                            )
-                        )
-                )
-            }
         }
     }
 }
@@ -338,26 +399,23 @@ private fun ScrubbingFeedbackPill(targetMs: Long, deltaSec: Int, totalMs: Long) 
 private fun DoubleTapSeekPulse(isForward: Boolean, seconds: Int) {
     Box(
         modifier = Modifier
-            .size(110.dp)
-            .shadow(16.dp, CircleShape)
+            .size(70.dp)
             .clip(CircleShape)
-            .background(Color(0xDD0F172A))
-            .border(2.dp, Brush.radialGradient(listOf(Color(0xFF60A5FA), Color(0xFF1E60FF))), CircleShape),
+            .background(Color(0x4400E5FF)),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 imageVector = if (isForward) Icons.Default.FastForward else Icons.Default.FastRewind,
                 contentDescription = null,
-                tint = Color(0xFF60A5FA),
-                modifier = Modifier.size(38.dp)
+                tint = Color.White,
+                modifier = Modifier.size(26.dp)
             )
-            Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "${if (isForward) "+" else "-"}${seconds}s",
+                text = "${seconds}s",
                 color = Color.White,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.ExtraBold
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
             )
         }
     }

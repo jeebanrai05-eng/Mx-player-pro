@@ -1,9 +1,9 @@
 {
-  "versionName": "1.0.3",
-  "versionCode": 7,
-  "releaseTag": "v1.0.3",
-  "releaseTitle": "Ultra Video Player Pro v1.0.3",
-  "releaseNotes": "• 🔒 Maximum Security Vault: Isolated internal storage with .nomedia; 100% hidden from PC/USB, galleries & file managers\n• 🗑️ Silent Clean Deletion: Eliminates redundant 'Allow Ultra Video Player to delete this video' system dialogs\n• 🔓 Instant Gallery Restoration: Unlocked videos re-appear immediately across device apps and PC USB\n• ✨ Clean Streamlined Settings UI: Clutter-free Settings with automatic background release detection\n• ⚡ Smooth 120Hz playback performance and hardware decoding optimizations",
-  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.3/app-release.apk",
+  "versionName": "1.0.4",
+  "versionCode": 8,
+  "releaseTag": "v1.0.4",
+  "releaseTitle": "Ultra Video Player Pro v1.0.4",
+  "releaseNotes": "• 🎦 Cinematic Video Player UI: Floating glassmorphic dock bar with Fit Screen, Tracks, 1.0x Speed, Sleep Timer, and Quality/HDR+ pills\n• ⚡ Glowing Electric Cyan-Blue Seeker: Custom hardware-drawn progress line with halo thumb and live scrubbing preview\n• 🔆 Left-Edge Vertical Brightness Line: Sleek glassmorphic vertical swipe HUD with sun icon and glowing blue line\n• 🔊 Right-Edge Vertical Volume Line: Sleek glassmorphic vertical swipe HUD with speaker icon and glowing blue line\n• 🌈 True HDR & HDR10+ Support: 10-bit BT.2020 wide color gamut, hardware-accelerated SurfaceView decoding, and Vivid Brightness Boost\n• 🔄 Auto-Rotate on Click: Instantly plays in full-screen sensor landscape mode\n• 🔒 Maximum Security Isolated Private Vault: Hidden from PC USB, file managers & media scanners\n• 🗑️ Silent Clean Media Deletion without redundant system permission popups",
+  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.4/app-release.apk",
   "sha256": ""
 }

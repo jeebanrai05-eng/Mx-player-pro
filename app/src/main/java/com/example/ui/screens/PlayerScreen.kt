@@ -17,6 +17,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -46,6 +48,9 @@ import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.HighQuality
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
@@ -62,12 +67,18 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.style.TextOverflow
+import com.example.ui.components.CinematicSeekerBar
+import com.example.ui.components.HdrPlaybackMode
+import com.example.ui.components.QualityHdrDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -177,15 +188,21 @@ fun PlayerScreen(
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showTrackDialog by remember { mutableStateOf(false) }
     var showSleepTimerDialog by remember { mutableStateOf(false) }
+    var showQualityHdrDialog by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
 
-    // Modes
+    // Modes & HDR
     var currentAspectRatio by remember { mutableStateOf(VideoAspectRatio.FIT) }
     var orientationMode by remember { mutableStateOf(ScreenOrientationMode.LANDSCAPE) }
     var isBackgroundAudioEnabled by remember { mutableStateOf(backgroundPlaybackDefault) }
     var sleepTimerMode by remember { mutableStateOf(SleepTimerMode.OFF) }
     var sleepTimerJob by remember { mutableStateOf<Job?>(null) }
     var isFavorite by remember { mutableStateOf(currentVideo.isFavorite) }
+    var isHdrActive by remember { mutableStateOf(false) }
+    var hdrFormatDetected by remember { mutableStateOf("HDR10+") }
+    var isHdrBoostEnabled by remember { mutableStateOf(true) }
+    var currentHdrMode by remember { mutableStateOf(HdrPlaybackMode.AUTO) }
 
     // System bars immersion helper
     fun setFullscreen(enable: Boolean) {
@@ -200,13 +217,46 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-rotate on video click & cleanup on exit
+    // Auto-rotate on video click, enable HDR10+ color mode & cleanup on exit
     DisposableEffect(Unit) {
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         setFullscreen(true)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                activity?.window?.colorMode = ActivityInfo.COLOR_MODE_HDR
+            } catch (e: Exception) {
+                // Device display may not support HDR mode
+            }
+        }
         onDispose {
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             setFullscreen(false)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    activity?.window?.colorMode = ActivityInfo.COLOR_MODE_DEFAULT
+                } catch (e: Exception) {
+                    // Ignore
+                }
+            }
+        }
+    }
+
+    // Handle HDR color mode switches
+    LaunchedEffect(currentHdrMode, isHdrActive) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            activity?.window?.let { win ->
+                try {
+                    when (currentHdrMode) {
+                        HdrPlaybackMode.FORCE_HDR -> win.colorMode = ActivityInfo.COLOR_MODE_HDR
+                        HdrPlaybackMode.SDR -> win.colorMode = ActivityInfo.COLOR_MODE_DEFAULT
+                        HdrPlaybackMode.AUTO -> {
+                            win.colorMode = if (isHdrActive) ActivityInfo.COLOR_MODE_HDR else ActivityInfo.COLOR_MODE_DEFAULT
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Graceful fallback
+                }
+            }
         }
     }
 
@@ -363,6 +413,30 @@ fun PlayerScreen(
                             subs.add(info)
                         } else if (type == C.TRACK_TYPE_AUDIO) {
                             audios.add(info)
+                        } else if (type == C.TRACK_TYPE_VIDEO) {
+                            val colorInfo = format.colorInfo
+                            val isColorHdr = colorInfo != null && (
+                                colorInfo.colorTransfer == C.COLOR_TRANSFER_ST2084 ||
+                                colorInfo.colorTransfer == C.COLOR_TRANSFER_HLG ||
+                                colorInfo.colorSpace == C.COLOR_SPACE_BT2020
+                            )
+                            val isCodecHdr = format.codecs?.contains("dv") == true ||
+                                format.codecs?.contains("hdr") == true ||
+                                format.sampleMimeType?.contains("hdr") == true
+
+                            val isTitleHdr = currentVideo.title.contains("HDR", ignoreCase = true) ||
+                                currentVideo.title.contains("HDR10", ignoreCase = true) ||
+                                currentVideo.title.contains("HDR10+", ignoreCase = true) ||
+                                currentVideo.title.contains("HLG", ignoreCase = true)
+
+                            if (isColorHdr || isCodecHdr || isTitleHdr || currentHdrMode == HdrPlaybackMode.FORCE_HDR) {
+                                isHdrActive = true
+                                hdrFormatDetected = when {
+                                    format.codecs?.contains("dv") == true -> "Dolby Vision"
+                                    colorInfo?.colorTransfer == C.COLOR_TRANSFER_HLG -> "HLG HDR"
+                                    else -> "HDR10+"
+                                }
+                            }
                         }
                     }
                 }
@@ -397,7 +471,7 @@ fun PlayerScreen(
             if (exoPlayer.duration > 0) {
                 totalDurationMs = exoPlayer.duration
             }
-            delay(500)
+            delay(200)
         }
     }
 
@@ -685,217 +759,323 @@ fun PlayerScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 18.dp)
+                        .padding(horizontal = 20.dp, vertical = 18.dp)
                         .align(Alignment.TopCenter),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = {
-                            val pos = exoPlayer.currentPosition
-                            coroutineScope.launch {
-                                repository.savePlaybackPosition(currentVideo, pos)
-                                onNavigateBack()
+                    // Circular glass back button
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x66151B26))
+                            .border(1.dp, Color(0x33FFFFFF), CircleShape)
+                            .clickable {
+                                val pos = exoPlayer.currentPosition
+                                coroutineScope.launch {
+                                    repository.savePlaybackPosition(currentVideo, pos)
+                                    onNavigateBack()
+                                }
                             }
-                        },
-                        modifier = Modifier.testTag("player_back_button")
+                            .testTag("player_back_button"),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(14.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = currentVideo.title,
                             color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+                        Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "${currentVideo.folderName} • ${currentVideo.resolutionLabel}",
-                            color = Color.White.copy(alpha = 0.7f),
+                            text = "${currentVideo.folderName} • ${currentVideo.resolutionLabel}" + if (isHdrActive) " • $hdrFormatDetected" else "",
+                            color = Color(0xFFB0BAC9),
                             fontSize = 12.sp,
                             maxLines = 1
                         )
                     }
 
-                    // Favorite toggle
-                    IconButton(
-                        onClick = {
-                            coroutineScope.launch {
-                                repository.toggleFavorite(currentVideo)
-                                isFavorite = !isFavorite
-                            }
-                        }
+                    // 4 circular glass buttons on top right
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (isFavorite) StatusRed else Color.White
-                        )
-                    }
-
-                    // Background Audio toggle
-                    IconButton(
-                        onClick = {
-                            isBackgroundAudioEnabled = !isBackgroundAudioEnabled
+                        // 1. Favorite toggle
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x66151B26))
+                                .border(1.dp, Color(0x33FFFFFF), CircleShape)
+                                .clickable {
+                                    coroutineScope.launch {
+                                        repository.toggleFavorite(currentVideo)
+                                        isFavorite = !isFavorite
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = "Favorite",
+                                tint = if (isFavorite) StatusRed else Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Headphones,
-                            contentDescription = "Background Audio",
-                            tint = if (isBackgroundAudioEnabled) MaterialTheme.colorScheme.primary else Color.White
-                        )
-                    }
 
-                    // PiP Button
-                    IconButton(
-                        onClick = {
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
-                                val aspectRatio = Rational(
-                                    currentVideo.width.takeIf { it > 0 } ?: 16,
-                                    currentVideo.height.takeIf { it > 0 } ?: 9
+                        // 2. Background Audio toggle
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(if (isBackgroundAudioEnabled) Color(0x99007BFF) else Color(0x66151B26))
+                                .border(1.dp, if (isBackgroundAudioEnabled) Color(0xFF007BFF) else Color(0x33FFFFFF), CircleShape)
+                                .clickable {
+                                    isBackgroundAudioEnabled = !isBackgroundAudioEnabled
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Headphones,
+                                contentDescription = "Background Audio",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // 3. PiP Button
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x66151B26))
+                                .border(1.dp, Color(0x33FFFFFF), CircleShape)
+                                .clickable {
+                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && activity != null) {
+                                        val aspectRatio = Rational(
+                                            currentVideo.width.takeIf { it > 0 } ?: 16,
+                                            currentVideo.height.takeIf { it > 0 } ?: 9
+                                        )
+                                        val pipParams = PictureInPictureParams.Builder()
+                                            .setAspectRatio(aspectRatio)
+                                            .build()
+                                        activity.enterPictureInPictureMode(pipParams)
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureInPictureAlt,
+                                contentDescription = "Picture in Picture",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // 4. More Options menu
+                        Box {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0x66151B26))
+                                    .border(1.dp, Color(0x33FFFFFF), CircleShape)
+                                    .clickable { showMoreMenu = true },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MoreVert,
+                                    contentDescription = "More",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
                                 )
-                                val pipParams = PictureInPictureParams.Builder()
-                                    .setAspectRatio(aspectRatio)
-                                    .build()
-                                activity.enterPictureInPictureMode(pipParams)
+                            }
+
+                            DropdownMenu(
+                                expanded = showMoreMenu,
+                                onDismissRequest = { showMoreMenu = false },
+                                modifier = Modifier.background(Color(0xFF141923))
+                            ) {
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null, tint = Color.White) },
+                                    text = { Text("Lock Screen Controls", color = Color.White) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        isScreenLocked = true
+                                        areControlsVisible = false
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Default.HighQuality, contentDescription = null, tint = Color(0xFF0070F3)) },
+                                    text = { Text("Quality & HDR+ Engine", color = Color.White) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        showQualityHdrDialog = true
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Default.ScreenRotation, contentDescription = null, tint = Color.White) },
+                                    text = { Text("Screen Orientation (${orientationMode.label})", color = Color.White) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        orientationMode = when (orientationMode) {
+                                            ScreenOrientationMode.AUTO -> ScreenOrientationMode.LANDSCAPE
+                                            ScreenOrientationMode.LANDSCAPE -> ScreenOrientationMode.PORTRAIT
+                                            ScreenOrientationMode.PORTRAIT -> ScreenOrientationMode.AUTO
+                                        }
+                                    }
+                                )
                             }
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PictureInPictureAlt,
-                            contentDescription = "Picture in Picture",
-                            tint = Color.White
-                        )
-                    }
-
-                    // Screen Lock button
-                    IconButton(
-                        onClick = {
-                            isScreenLocked = true
-                            areControlsVisible = false
-                        }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LockOpen,
-                            contentDescription = "Lock Screen",
-                            tint = Color.White
-                        )
                     }
                 }
 
-                // Center Play / Rewind / Forward Controls
+                // Center Play / Rewind / Forward Controls (Exact match to reference image!)
                 Row(
                     modifier = Modifier.align(Alignment.Center),
-                    horizontalArrangement = Arrangement.spacedBy(28.dp),
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Previous Video
-                    IconButton(
-                        onClick = {
-                            if (currentVideoIndex > 0) currentVideoIndex--
-                        },
-                        enabled = currentVideoIndex > 0,
-                        modifier = Modifier.size(48.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x66161F2E))
+                            .border(1.dp, Color(0x22FFFFFF), CircleShape)
+                            .clickable(enabled = currentVideoIndex > 0) {
+                                if (currentVideoIndex > 0) currentVideoIndex--
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.SkipPrevious,
                             contentDescription = "Previous Video",
                             tint = if (currentVideoIndex > 0) Color.White else Color.White.copy(alpha = 0.3f),
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
 
                     // Rewind 10s
-                    IconButton(
-                        onClick = {
-                            val newPos = (exoPlayer.currentPosition - doubleTapSeekSeconds * 1000L).coerceAtLeast(0L)
-                            exoPlayer.seekTo(newPos)
-                            showGestureFeedback(GestureOverlayType.DoubleTapSeek(false, doubleTapSeekSeconds))
-                        },
-                        modifier = Modifier.size(48.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x66161F2E))
+                            .border(1.dp, Color(0x22FFFFFF), CircleShape)
+                            .clickable {
+                                val newPos = (exoPlayer.currentPosition - doubleTapSeekSeconds * 1000L).coerceAtLeast(0L)
+                                exoPlayer.seekTo(newPos)
+                                showGestureFeedback(GestureOverlayType.DoubleTapSeek(false, doubleTapSeekSeconds))
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Replay10,
                             contentDescription = "Rewind",
                             tint = Color.White,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(28.dp)
                         )
                     }
 
-                    // Play / Pause FAB
-                    IconButton(
-                        onClick = {
-                            if (isPlaying) exoPlayer.pause() else exoPlayer.play()
-                            triggerControlsAutoHide()
-                        },
+                    // Glowing Center Play / Pause Button
+                    Box(
                         modifier = Modifier
-                            .size(72.dp)
-                            .shadow(16.dp, CircleShape)
+                            .size(86.dp)
                             .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(Color(0xFF38BDF8), Color(0xFF1E60FF))
-                                )
-                            )
-                            .testTag("player_play_pause_button")
+                            .background(Color(0x350099FF)),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = Color.White,
-                            modifier = Modifier.size(40.dp)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .shadow(16.dp, CircleShape)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(Color(0xFF00B4DB), Color(0xFF0066FF))
+                                    )
+                                )
+                                .clickable {
+                                    if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                    triggerControlsAutoHide()
+                                }
+                                .testTag("player_play_pause_button"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = Color.White,
+                                modifier = Modifier.size(36.dp)
+                            )
+                        }
                     }
 
                     // Fast Forward 10s
-                    IconButton(
-                        onClick = {
-                            val newPos = (exoPlayer.currentPosition + doubleTapSeekSeconds * 1000L).coerceAtMost(totalDurationMs)
-                            exoPlayer.seekTo(newPos)
-                            showGestureFeedback(GestureOverlayType.DoubleTapSeek(true, doubleTapSeekSeconds))
-                        },
-                        modifier = Modifier.size(48.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x66161F2E))
+                            .border(1.dp, Color(0x22FFFFFF), CircleShape)
+                            .clickable {
+                                val newPos = (exoPlayer.currentPosition + doubleTapSeekSeconds * 1000L).coerceAtMost(totalDurationMs)
+                                exoPlayer.seekTo(newPos)
+                                showGestureFeedback(GestureOverlayType.DoubleTapSeek(true, doubleTapSeekSeconds))
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Forward10,
                             contentDescription = "Fast Forward",
                             tint = Color.White,
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(28.dp)
                         )
                     }
 
                     // Next Video
-                    IconButton(
-                        onClick = {
-                            if (currentVideoIndex < videoList.size - 1) currentVideoIndex++
-                        },
-                        enabled = currentVideoIndex < videoList.size - 1,
-                        modifier = Modifier.size(48.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x66161F2E))
+                            .border(1.dp, Color(0x22FFFFFF), CircleShape)
+                            .clickable(enabled = currentVideoIndex < videoList.size - 1) {
+                                if (currentVideoIndex < videoList.size - 1) currentVideoIndex++
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.SkipNext,
                             contentDescription = "Next Video",
                             tint = if (currentVideoIndex < videoList.size - 1) Color.White else Color.White.copy(alpha = 0.3f),
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                     }
                 }
 
-                // Bottom Panel: Seek Bar, Time Indicators, Subtitles, Speed, Aspect, Sleep Timer
+                // Bottom Panel: Seek Bar, Time Indicators, and Floating Dock Bar
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(horizontal = 24.dp, vertical = 14.dp)
                         .align(Alignment.BottomCenter)
                 ) {
-                    // Time text and duration
+                    // Time text and duration (00:03 on left, 00:05 on right)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -905,135 +1085,237 @@ fun PlayerScreen(
                             text = formatMs(currentPositionMs),
                             color = Color.White,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
+                            fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = formatMs(totalDurationMs),
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = Color.White,
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
-                    // Seek Bar Slider
-                    Slider(
-                        value = if (totalDurationMs > 0) currentPositionMs.toFloat() / totalDurationMs.toFloat() else 0f,
-                        onValueChange = { fraction ->
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Custom Cinematic Seeker Bar (glowing electric cyan-blue line with halo thumb)
+                    CinematicSeekerBar(
+                        currentPositionMs = currentPositionMs,
+                        totalDurationMs = totalDurationMs,
+                        bufferedPositionMs = bufferedPositionMs,
+                        onSeek = { seekTarget ->
                             triggerControlsAutoHide()
-                            val seekTarget = (fraction * totalDurationMs).toLong()
                             exoPlayer.seekTo(seekTarget)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.25f)
-                        )
+                        }
                     )
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // Secondary Action Controls Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    // Floating Glassmorphic Pill Dock Bar (Exact match to reference image!)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(32.dp))
+                            .background(Color(0x880C1220))
+                            .border(1.dp, Color(0x25FFFFFF), RoundedCornerShape(32.dp))
+                            .padding(horizontal = 8.dp, vertical = 6.dp)
                     ) {
-                        // Aspect Ratio button
-                        IconButton(
-                            onClick = {
-                                val nextIndex = (currentAspectRatio.ordinal + 1) % VideoAspectRatio.values().size
-                                currentAspectRatio = VideoAspectRatio.values()[nextIndex]
-                            }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.AspectRatio,
-                                    contentDescription = "Aspect Ratio",
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Text(
-                                    text = currentAspectRatio.label.take(6),
-                                    fontSize = 9.sp,
-                                    color = Color.White
-                                )
-                            }
-                        }
-
-                        // Tracks (Subtitles & Audio)
-                        IconButton(onClick = { showTrackDialog = true }) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.Subtitles,
-                                    contentDescription = "Subtitles & Audio",
-                                    tint = if (subtitleTracks.any { it.isSelected }) MaterialTheme.colorScheme.primary else Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Text(
-                                    text = "Tracks",
-                                    fontSize = 9.sp,
-                                    color = Color.White
-                                )
-                            }
-                        }
-
-                        // Playback Speed
-                        IconButton(onClick = { showSpeedDialog = true }) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.Speed,
-                                    contentDescription = "Speed",
-                                    tint = if (playbackSpeed != 1.0f) MaterialTheme.colorScheme.primary else Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Text(
-                                    text = "${playbackSpeed}x",
-                                    fontSize = 9.sp,
-                                    color = Color.White
-                                )
-                            }
-                        }
-
-                        // Sleep Timer
-                        IconButton(onClick = { showSleepTimerDialog = true }) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.Timer,
-                                    contentDescription = "Sleep Timer",
-                                    tint = if (sleepTimerMode != SleepTimerMode.OFF) MaterialTheme.colorScheme.primary else Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Text(
-                                    text = if (sleepTimerMode == SleepTimerMode.OFF) "Timer" else "${sleepTimerMode.minutes}m",
-                                    fontSize = 9.sp,
-                                    color = Color.White
-                                )
-                            }
-                        }
-
-                        // Screen Rotation
-                        IconButton(
-                            onClick = {
-                                orientationMode = when (orientationMode) {
-                                    ScreenOrientationMode.AUTO -> ScreenOrientationMode.LANDSCAPE
-                                    ScreenOrientationMode.LANDSCAPE -> ScreenOrientationMode.PORTRAIT
-                                    ScreenOrientationMode.PORTRAIT -> ScreenOrientationMode.AUTO
+                            // 1. Fit Screen Pill (Active: Blue Gradient)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(Color(0xFF0066FF), Color(0xFF0044CC))
+                                        )
+                                    )
+                                    .border(1.dp, Color(0xFF38BDF8), RoundedCornerShape(20.dp))
+                                    .clickable {
+                                        val nextIndex = (currentAspectRatio.ordinal + 1) % VideoAspectRatio.values().size
+                                        currentAspectRatio = VideoAspectRatio.values()[nextIndex]
+                                    }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AspectRatio,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = currentAspectRatio.label,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                 }
                             }
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(
-                                    imageVector = Icons.Default.ScreenRotation,
-                                    contentDescription = "Rotation",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Text(
-                                    text = orientationMode.name.take(4),
-                                    fontSize = 9.sp,
-                                    color = Color.White
-                                )
+
+                            // 2. Tracks Pill (♫ Tracks ˅)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color(0x441F293D))
+                                    .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(20.dp))
+                                    .clickable { showTrackDialog = true }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Audiotrack,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "Tracks",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            // 3. Speed Pill (⏱ 1.0x ˅)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color(0x441F293D))
+                                    .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(20.dp))
+                                    .clickable { showSpeedDialog = true }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Speed,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "${playbackSpeed}x",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            // 4. Timer Pill (⏲ Timer ˅)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(Color(0x441F293D))
+                                    .border(1.dp, Color(0x22FFFFFF), RoundedCornerShape(20.dp))
+                                    .clickable { showSleepTimerDialog = true }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Timer,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = if (sleepTimerMode == SleepTimerMode.OFF) "Timer" else "${sleepTimerMode.minutes}m",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color.White
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+
+                            // 5. Quality & HDR+ Pill (HD Quality ˅)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(20.dp))
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            if (isHdrActive) {
+                                                listOf(Color(0xFF0F3960), Color(0xFF165084))
+                                            } else {
+                                                listOf(Color(0x441F293D), Color(0x441F293D))
+                                            }
+                                        )
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isHdrActive) Color(0xFF00E5FF) else Color(0x22FFFFFF),
+                                        RoundedCornerShape(20.dp)
+                                    )
+                                    .clickable { showQualityHdrDialog = true }
+                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.HighQuality,
+                                        contentDescription = null,
+                                        tint = if (isHdrActive) Color(0xFF00E5FF) else Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = if (isHdrActive) "HDR10+" else "Quality",
+                                        fontSize = 12.sp,
+                                        fontWeight = if (isHdrActive) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (isHdrActive) Color(0xFF00E5FF) else Color.White
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = if (isHdrActive) Color(0xFF00E5FF) else Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -1088,6 +1370,44 @@ fun PlayerScreen(
                     sleepTimerMode = mode
                 },
                 onDismiss = { showSleepTimerDialog = false }
+            )
+        }
+
+        if (showQualityHdrDialog) {
+            QualityHdrDialog(
+                isHdrActive = isHdrActive,
+                hdrFormatLabel = hdrFormatDetected,
+                resolutionLabel = currentVideo.resolutionLabel,
+                width = currentVideo.width,
+                height = currentVideo.height,
+                isHdrBoostEnabled = isHdrBoostEnabled,
+                currentHdrMode = currentHdrMode,
+                onHdrBoostToggled = { enabled ->
+                    isHdrBoostEnabled = enabled
+                    if (enabled) {
+                        activity?.let { act ->
+                            val lp = act.window.attributes
+                            lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_FULL
+                            act.window.attributes = lp
+                        }
+                    } else {
+                        activity?.let { act ->
+                            val lp = act.window.attributes
+                            lp.screenBrightness = (currentBrightnessPercent / 100f).coerceIn(0.01f, 1f)
+                            act.window.attributes = lp
+                        }
+                    }
+                },
+                onHdrModeSelected = { mode ->
+                    currentHdrMode = mode
+                    if (mode == HdrPlaybackMode.FORCE_HDR) {
+                        isHdrActive = true
+                        hdrFormatDetected = "HDR10+"
+                    } else if (mode == HdrPlaybackMode.SDR) {
+                        isHdrActive = false
+                    }
+                },
+                onDismissRequest = { showQualityHdrDialog = false }
             )
         }
     }
