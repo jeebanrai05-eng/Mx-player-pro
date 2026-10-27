@@ -36,6 +36,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
@@ -407,59 +408,73 @@ fun LibraryScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp),
+                        .padding(horizontal = 16.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TopPillTab.values().forEach { tab ->
                         val isActive = activePillTab == tab
 
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(22.dp))
-                                .clickable {
-                                    activePillTab = tab
-                                    if (tab == TopPillTab.APPS) {
-                                        showExploreOnlineSheet = true
-                                    }
-                                }
-                                .then(
-                                    if (isActive) {
-                                        Modifier
-                                            .background(
-                                                Brush.horizontalGradient(
-                                                    listOf(Color(0xFF0070F3), Color(0xFF0051CC))
-                                                )
-                                            )
-                                            .shadow(elevation = 6.dp, shape = RoundedCornerShape(22.dp))
-                                    } else {
-                                        Modifier
-                                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                                            .border(
-                                                width = 1.dp,
-                                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                                                shape = RoundedCornerShape(22.dp)
-                                            )
-                                    }
-                                )
-                                .padding(horizontal = 16.dp, vertical = 9.dp),
-                            contentAlignment = Alignment.Center
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(22.dp))
+                                    .clickable {
+                                        activePillTab = tab
+                                        if (tab == TopPillTab.APPS) {
+                                            showExploreOnlineSheet = true
+                                        }
+                                    }
+                                    .then(
+                                        if (isActive) {
+                                            Modifier
+                                                .background(
+                                                    Brush.horizontalGradient(
+                                                        listOf(Color(0xFF0070F3), Color(0xFF0051CC))
+                                                    )
+                                                )
+                                                .shadow(elevation = 4.dp, shape = RoundedCornerShape(22.dp))
+                                        } else {
+                                            Modifier
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                .border(
+                                                    width = 1.dp,
+                                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                                    shape = RoundedCornerShape(22.dp)
+                                                )
+                                        }
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = tab.icon,
-                                    contentDescription = tab.title,
-                                    tint = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(17.dp)
-                                )
-                                Text(
-                                    text = tab.title,
-                                    color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = tab.icon,
+                                        contentDescription = tab.title,
+                                        tint = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                    Text(
+                                        text = tab.title,
+                                        color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            }
+                            if (isActive) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .width(22.dp)
+                                        .height(3.dp)
+                                        .clip(RoundedCornerShape(1.5.dp))
+                                        .background(ProBlue)
                                 )
                             }
                         }
@@ -550,24 +565,39 @@ fun LibraryScreen(
                     onClick = {
                         openDocumentLauncher.launch(arrayOf("video/*"))
                     },
-                    containerColor = ProBlue,
+                    containerColor = Color.Transparent,
                     contentColor = Color.White,
-                    shape = RoundedCornerShape(16.dp),
-                    modifier = Modifier.testTag("open_video_file_fab")
+                    shape = RoundedCornerShape(26.dp),
+                    elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(
+                        defaultElevation = 6.dp,
+                        pressedElevation = 2.dp
+                    ),
+                    modifier = Modifier
+                        .testTag("open_video_file_fab")
+                        .shadow(6.dp, RoundedCornerShape(26.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFF1668FE), Color(0xFF0052D9))
+                            ),
+                            RoundedCornerShape(26.dp)
+                        )
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp),
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = Icons.Default.FileOpen,
-                            contentDescription = "Open Video File"
+                            contentDescription = "Open Video File",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Open File",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontSize = 14.sp,
+                            color = Color.White
                         )
                     }
                 }
@@ -615,28 +645,37 @@ fun LibraryScreen(
                                     .fillMaxWidth()
                                     .clickable { onOpenPrivateVault() }
                                     .testTag("private_folder_banner_card"),
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
-                                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                                shape = RoundedCornerShape(18.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (userPreferences.isDarkTheme) Color(0xFF1E293B) else Color(0xFFF1F6FE)
+                                ),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = if (userPreferences.isDarkTheme) Color(0xFF334155) else Color(0xFFDBEAFE)
+                                ),
+                                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                             ) {
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(14.dp),
+                                        .padding(horizontal = 16.dp, vertical = 14.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(46.dp)
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(
+                                                Brush.linearGradient(
+                                                    listOf(Color(0xFF3B82F6), Color(0xFF1D4ED8))
+                                                )
+                                            ),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Lock,
                                             contentDescription = "Private Folder",
-                                            tint = MaterialTheme.colorScheme.primary,
+                                            tint = Color.White,
                                             modifier = Modifier.size(24.dp)
                                         )
                                     }
@@ -645,36 +684,40 @@ fun LibraryScreen(
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
                                                 text = "Private Folder",
-                                                fontSize = 15.sp,
+                                                fontSize = 16.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = MaterialTheme.colorScheme.onSurface
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Box(
                                                 modifier = Modifier
-                                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    .background(
+                                                        if (userPreferences.isDarkTheme) Color(0xFF1E3A8A) else Color(0xFFDBEAFE),
+                                                        RoundedCornerShape(6.dp)
+                                                    )
+                                                    .padding(horizontal = 7.dp, vertical = 3.dp)
                                             ) {
                                                 Text(
                                                     text = "PIN LOCK",
                                                     fontSize = 9.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.primary
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (userPreferences.isDarkTheme) Color(0xFF93C5FD) else Color(0xFF1D4ED8),
+                                                    letterSpacing = 0.5.sp
                                                 )
                                             }
                                         }
-                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Spacer(modifier = Modifier.height(3.dp))
                                         Text(
                                             text = "Hide and protect personal videos",
                                             fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                                         )
                                     }
                                     Icon(
-                                        imageVector = Icons.Default.Lock,
+                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                        modifier = Modifier.size(18.dp)
+                                        modifier = Modifier.size(22.dp)
                                     )
                                 }
                             }

@@ -82,6 +82,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
@@ -180,11 +181,34 @@ fun PlayerScreen(
 
     // Modes
     var currentAspectRatio by remember { mutableStateOf(VideoAspectRatio.FIT) }
-    var orientationMode by remember { mutableStateOf(ScreenOrientationMode.AUTO) }
+    var orientationMode by remember { mutableStateOf(ScreenOrientationMode.LANDSCAPE) }
     var isBackgroundAudioEnabled by remember { mutableStateOf(backgroundPlaybackDefault) }
     var sleepTimerMode by remember { mutableStateOf(SleepTimerMode.OFF) }
     var sleepTimerJob by remember { mutableStateOf<Job?>(null) }
     var isFavorite by remember { mutableStateOf(currentVideo.isFavorite) }
+
+    // System bars immersion helper
+    fun setFullscreen(enable: Boolean) {
+        activity?.window?.let { window ->
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            if (enable) {
+                controller.hide(WindowInsetsCompat.Type.systemBars())
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
+            }
+        }
+    }
+
+    // Auto-rotate on video click & cleanup on exit
+    DisposableEffect(Unit) {
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        setFullscreen(true)
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            setFullscreen(false)
+        }
+    }
 
     // Gestures overlay state
     var gestureOverlay by remember { mutableStateOf<GestureOverlayType>(GestureOverlayType.None) }
@@ -217,19 +241,6 @@ fun PlayerScreen(
                 // Ignore if not persistable
             }
             // Add subtitle to current media item
-        }
-    }
-
-    // System bars immersion helper
-    fun setFullscreen(enable: Boolean) {
-        activity?.window?.let { window ->
-            val controller = WindowCompat.getInsetsController(window, window.decorView)
-            if (enable) {
-                controller.hide(WindowInsetsCompat.Type.systemBars())
-                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            } else {
-                controller.show(WindowInsetsCompat.Type.systemBars())
-            }
         }
     }
 
@@ -825,16 +836,21 @@ fun PlayerScreen(
                             triggerControlsAutoHide()
                         },
                         modifier = Modifier
-                            .size(68.dp)
+                            .size(72.dp)
+                            .shadow(16.dp, CircleShape)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary)
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFF38BDF8), Color(0xFF1E60FF))
+                                )
+                            )
                             .testTag("player_play_pause_button")
                     ) {
                         Icon(
                             imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = AmoledBlack,
-                            modifier = Modifier.size(38.dp)
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
                         )
                     }
 

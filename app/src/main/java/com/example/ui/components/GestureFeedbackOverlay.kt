@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,24 +23,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrightnessHigh
 import androidx.compose.material.icons.filled.BrightnessLow
+import androidx.compose.material.icons.filled.BrightnessMedium
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeMute
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.ui.theme.DarkSurfaceElevated
+import com.example.ui.theme.ProBlue
 
 sealed class GestureOverlayType {
     object None : GestureOverlayType()
@@ -62,8 +63,8 @@ fun GestureFeedbackOverlay(
     ) {
         AnimatedVisibility(
             visible = overlayType !is GestureOverlayType.None,
-            enter = fadeIn() + scaleIn(initialScale = 0.85f),
-            exit = fadeOut() + scaleOut(targetScale = 0.85f)
+            enter = fadeIn() + scaleIn(initialScale = 0.82f),
+            exit = fadeOut() + scaleOut(targetScale = 0.82f)
         ) {
             when (overlayType) {
                 is GestureOverlayType.Volume -> {
@@ -93,12 +94,15 @@ fun GestureFeedbackOverlay(
 
 @Composable
 private fun VolumeFeedbackPill(percentage: Int) {
+    val fillFraction = (percentage / 100f).coerceIn(0f, 1f)
+
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xDD10141E))
-            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
-            .padding(horizontal = 24.dp, vertical = 18.dp),
+            .shadow(16.dp, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xEE0B111E))
+            .border(1.5.dp, Brush.verticalGradient(listOf(Color(0x663B82F6), Color(0x221E293B))), RoundedCornerShape(24.dp))
+            .padding(horizontal = 26.dp, vertical = 20.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
@@ -107,84 +111,145 @@ private fun VolumeFeedbackPill(percentage: Int) {
         ) {
             val icon = when {
                 percentage <= 0 -> Icons.Default.VolumeMute
-                percentage < 50 -> Icons.Default.VolumeDown
+                percentage < 40 -> Icons.Default.VolumeDown
                 else -> Icons.Default.VolumeUp
             }
 
-            Icon(
-                imageVector = icon,
-                contentDescription = "Volume",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x331E60FF)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = "Volume",
+                    tint = Color(0xFF60A5FA),
+                    modifier = Modifier.size(30.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
+                text = "Volume",
+                color = Color(0xFF94A3B8),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            Text(
                 text = "$percentage%",
                 color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.SansSerif
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            LinearProgressIndicator(
-                progress = { (percentage / 100f).coerceIn(0f, 1f) },
+            // Modern glowing progress track
+            Box(
                 modifier = Modifier
-                    .width(100.dp)
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.White.copy(alpha = 0.2f)
-            )
+                    .width(130.dp)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0x33FFFFFF))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fillFraction)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFF38BDF8), Color(0xFF1E60FF))
+                            )
+                        )
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun BrightnessFeedbackPill(percentage: Int) {
+    val fillFraction = (percentage / 100f).coerceIn(0f, 1f)
+
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(Color(0xDD10141E))
-            .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(20.dp))
-            .padding(horizontal = 24.dp, vertical = 18.dp),
+            .shadow(16.dp, RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xEE0B111E))
+            .border(1.5.dp, Brush.verticalGradient(listOf(Color(0x66F59E0B), Color(0x221E293B))), RoundedCornerShape(24.dp))
+            .padding(horizontal = 26.dp, vertical = 20.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            val icon = if (percentage < 50) Icons.Default.BrightnessLow else Icons.Default.BrightnessHigh
+            val icon = when {
+                percentage < 33 -> Icons.Default.BrightnessLow
+                percentage < 66 -> Icons.Default.BrightnessMedium
+                else -> Icons.Default.BrightnessHigh
+            }
 
-            Icon(
-                imageVector = icon,
-                contentDescription = "Brightness",
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(36.dp)
-            )
+            Box(
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x33F59E0B)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = "Brightness",
+                    tint = Color(0xFFFBBF24),
+                    modifier = Modifier.size(30.dp)
+                )
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
+                text = "Brightness",
+                color = Color(0xFF94A3B8),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium
+            )
+
+            Text(
                 text = "$percentage%",
                 color = Color.White,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.SansSerif
             )
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            LinearProgressIndicator(
-                progress = { (percentage / 100f).coerceIn(0f, 1f) },
+            // Glowing amber progress track
+            Box(
                 modifier = Modifier
-                    .width(100.dp)
-                    .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.White.copy(alpha = 0.2f)
-            )
+                    .width(130.dp)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(Color(0x33FFFFFF))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fillFraction)
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFFFDE68A), Color(0xFFF59E0B))
+                            )
+                        )
+                )
+            }
         }
     }
 }
@@ -194,42 +259,77 @@ private fun ScrubbingFeedbackPill(targetMs: Long, deltaSec: Int, totalMs: Long) 
     val sign = if (deltaSec >= 0) "+" else ""
     val formattedTarget = formatMs(targetMs)
     val formattedTotal = formatMs(totalMs)
+    val progressFraction = if (totalMs > 0) (targetMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f) else 0f
 
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xDD0C0F17))
-            .border(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
-            .padding(horizontal = 24.dp, vertical = 16.dp),
+            .shadow(20.dp, RoundedCornerShape(22.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0xF00A0F1D))
+            .border(1.5.dp, Color(0xFF38BDF8).copy(alpha = 0.5f), RoundedCornerShape(22.dp))
+            .padding(horizontal = 28.dp, vertical = 18.dp),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    imageVector = if (deltaSec >= 0) Icons.Default.FastForward else Icons.Default.FastRewind,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp)
-                )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x3338BDF8)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = if (deltaSec >= 0) Icons.Default.FastForward else Icons.Default.FastRewind,
+                        contentDescription = null,
+                        tint = Color(0xFF38BDF8),
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
                 Text(
                     text = "$sign${deltaSec}s",
-                    color = MaterialTheme.colorScheme.primary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
+                    color = Color(0xFF38BDF8),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.ExtraBold
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = "$formattedTarget / $formattedTotal",
                 color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.SemiBold
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
             )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Mini scrubbing scrub bar
+            Box(
+                modifier = Modifier
+                    .width(160.dp)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color(0x44FFFFFF))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(progressFraction)
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFF38BDF8), ProBlue)
+                            )
+                        )
+                )
+            }
         }
     }
 }
@@ -238,25 +338,26 @@ private fun ScrubbingFeedbackPill(targetMs: Long, deltaSec: Int, totalMs: Long) 
 private fun DoubleTapSeekPulse(isForward: Boolean, seconds: Int) {
     Box(
         modifier = Modifier
-            .size(100.dp)
+            .size(110.dp)
+            .shadow(16.dp, CircleShape)
             .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-            .border(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), CircleShape),
+            .background(Color(0xDD0F172A))
+            .border(2.dp, Brush.radialGradient(listOf(Color(0xFF60A5FA), Color(0xFF1E60FF))), CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(
                 imageVector = if (isForward) Icons.Default.FastForward else Icons.Default.FastRewind,
                 contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(36.dp)
+                tint = Color(0xFF60A5FA),
+                modifier = Modifier.size(38.dp)
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = "${if (isForward) "+" else "-"}${seconds}s",
                 color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold
             )
         }
     }

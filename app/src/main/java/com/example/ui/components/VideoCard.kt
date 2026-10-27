@@ -227,20 +227,29 @@ fun VideoListCard(
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = video.folderName,
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    val (tagBg, tagText) = getFolderTagColors(video.folderName)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(tagBg)
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = video.folderName,
+                            fontSize = 10.sp,
+                            color = tagText,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
                     Text(
                         text = "•",
                         fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                     )
                     Text(
                         text = video.formattedSize,
@@ -563,5 +572,18 @@ fun VideoGridCard(
                 }
             }
         }
+    }
+}
+
+private fun getFolderTagColors(folderName: String): Pair<Color, Color> {
+    val lower = folderName.lowercase()
+    return when {
+        lower.contains("camera") || lower.contains("dcim") -> Pair(Color(0xFFE0F2FE), Color(0xFF0284C7))
+        lower.contains("whatsapp") -> Pair(Color(0xFFDCFCE7), Color(0xFF16A34A))
+        lower.contains("download") -> Pair(Color(0xFFFFEDD5), Color(0xFFEA580C))
+        lower.contains("screenshot") -> Pair(Color(0xFFF3E8FF), Color(0xFF9333EA))
+        lower.contains("game") -> Pair(Color(0xFFFEE2E2), Color(0xFFDC2626))
+        lower.contains("restore") -> Pair(Color(0xFFCCFBF1), Color(0xFF0D9488))
+        else -> Pair(Color(0xFFEEF2FF), Color(0xFF4F46E5))
     }
 }
