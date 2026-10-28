@@ -9,8 +9,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -592,45 +599,61 @@ fun LibraryScreen(
         },
         floatingActionButton = {
             if (activeBottomNav != BottomNavTab.SETTINGS) {
+                // Determine target recent video (last played, or newest added)
+                val targetRecentVideo = remember(videos, recentVideos) {
+                    recentVideos.firstOrNull() ?: videos.maxByOrNull { it.dateAdded } ?: videos.firstOrNull()
+                }
+
+                // Breathing/Pulse glow animation for the circular Play FAB
+                val infiniteTransition = rememberInfiniteTransition(label = "fab_pulse")
+                val pulseScale by infiniteTransition.animateFloat(
+                    initialValue = 1.0f,
+                    targetValue = 1.06f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1200, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "pulse_scale"
+                )
+
                 FloatingActionButton(
                     onClick = {
-                        openDocumentLauncher.launch(arrayOf("video/*"))
+                        if (targetRecentVideo != null) {
+                            val playlist = if (recentVideos.isNotEmpty()) recentVideos else videos
+                            val index = playlist.indexOfFirst { it.id == targetRecentVideo.id }.coerceAtLeast(0)
+                            onVideoClick(playlist, index)
+                        } else {
+                            // If no videos yet, fallback to document launcher
+                            openDocumentLauncher.launch(arrayOf("video/*"))
+                        }
                     },
                     containerColor = Color.Transparent,
                     contentColor = Color.White,
-                    shape = RoundedCornerShape(26.dp),
+                    shape = CircleShape,
                     elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(
-                        defaultElevation = 6.dp,
-                        pressedElevation = 2.dp
+                        defaultElevation = 8.dp,
+                        pressedElevation = 3.dp
                     ),
                     modifier = Modifier
-                        .testTag("open_video_file_fab")
-                        .shadow(6.dp, RoundedCornerShape(26.dp))
+                        .size(58.dp)
+                        .scale(pulseScale)
+                        .testTag("play_recent_video_fab")
+                        .shadow(10.dp, CircleShape, spotColor = ProBlue)
                         .background(
-                            Brush.horizontalGradient(
-                                listOf(Color(0xFF1668FE), Color(0xFF0052D9))
+                            Brush.linearGradient(
+                                listOf(Color(0xFF38BDF8), Color(0xFF1668FE), Color(0xFF0052D9))
                             ),
-                            RoundedCornerShape(26.dp)
+                            CircleShape
                         )
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FileOpen,
-                            contentDescription = "Open Video File",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Open File",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = Color.White
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play Recent Video",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .padding(start = 2.dp)
+                    )
                 }
             }
         },

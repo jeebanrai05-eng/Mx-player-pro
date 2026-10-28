@@ -194,10 +194,23 @@ fun UltraVideoApp(
         hasPermission = granted
     }
 
+    // Update state & dialog
+    var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var isDownloadingUpdate by remember { mutableStateOf(false) }
+    var updateDownloadProgress by remember { mutableStateOf(0f) }
+
     // Notification permission on Android 13+
     val notificationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { _ -> }
+    ) { granted ->
+        if (granted && availableUpdate?.hasUpdate == true) {
+            val update = availableUpdate
+            if (update != null) {
+                UpdateNotificationHelper.showUpdateNotification(context, update)
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         if (!hasPermission) {
@@ -213,12 +226,6 @@ fun UltraVideoApp(
             }
         }
     }
-
-    // Update state & dialog
-    var availableUpdate by remember { mutableStateOf<UpdateInfo?>(null) }
-    var showUpdateDialog by remember { mutableStateOf(false) }
-    var isDownloadingUpdate by remember { mutableStateOf(false) }
-    var updateDownloadProgress by remember { mutableStateOf(0f) }
 
     // Background Update Check & System Notification
     LaunchedEffect(userPreferences.autoCheckUpdates, userPreferences.githubOwner, userPreferences.githubRepo) {

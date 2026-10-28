@@ -109,38 +109,21 @@ object UpdateManager {
                     val isNewer = (remoteVersionCode > currentVersionCode) ||
                             isVersionOrBuildHigher(remoteTag, currentVersionName, currentVersionCode)
 
-                    if (isNewer && remoteApk.isNotEmpty()) {
-                        // CRITICAL: Check if the APK URL actually exists before serving it to the user
-                        val isApkReachable = isUrlReachable(remoteApk, githubToken)
-                        if (isApkReachable) {
-                            return@withContext UpdateInfo(
-                                hasUpdate = true,
-                                latestVersionName = if (remoteVersionName.isNotEmpty()) remoteVersionName else remoteTag,
-                                latestVersionCode = if (remoteVersionCode > 0) remoteVersionCode else currentVersionCode + 1,
-                                releaseTitle = remoteTitle,
-                                releaseNotes = remoteNotes,
-                                downloadUrl = remoteApk,
-                                sha256Url = "",
-                                sha256Checksum = remoteSha,
-                                fileSizeFormatted = "~28 MB",
-                                isPrivateRepoError = false
-                            )
-                        } else {
-                            // The release metadata is newer, but the APK asset is not yet uploaded to GitHub Releases
-                            return@withContext UpdateInfo(
-                                hasUpdate = false,
-                                latestVersionName = if (remoteVersionName.isNotEmpty()) remoteVersionName else remoteTag,
-                                latestVersionCode = if (remoteVersionCode > 0) remoteVersionCode else currentVersionCode + 1,
-                                releaseTitle = "Release $remoteTag Pending Build",
-                                releaseNotes = "A newer version ($remoteTag) is registered, but the 'app-release.apk' file has not been uploaded to GitHub Releases yet.\n\nIf you recently pushed to GitHub, please wait 2-3 minutes for the GitHub Actions workflow to finish creating the release.",
-                                downloadUrl = "",
-                                sha256Url = "",
-                                sha256Checksum = "",
-                                fileSizeFormatted = "",
-                                isPrivateRepoError = false
-                            )
-                        }
-                    } else if (!isNewer) {
+                    if (isNewer) {
+                        val finalApk = if (remoteApk.isNotEmpty()) remoteApk else "https://github.com/$repoOwner/$repoName/releases/download/$remoteTag/app-release.apk"
+                        return@withContext UpdateInfo(
+                            hasUpdate = true,
+                            latestVersionName = if (remoteVersionName.isNotEmpty()) remoteVersionName else remoteTag,
+                            latestVersionCode = if (remoteVersionCode > 0) remoteVersionCode else currentVersionCode + 1,
+                            releaseTitle = remoteTitle,
+                            releaseNotes = remoteNotes,
+                            downloadUrl = finalApk,
+                            sha256Url = "",
+                            sha256Checksum = remoteSha,
+                            fileSizeFormatted = "~28 MB",
+                            isPrivateRepoError = false
+                        )
+                    } else {
                         return@withContext UpdateInfo(
                             hasUpdate = false,
                             latestVersionName = currentVersionName,
@@ -605,11 +588,39 @@ object UpdateManager {
                 return
             }
 
+            // On Android 8.0+ (Oreo, API 26+), verify unknown apps install permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    val manageIntent = Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
+                        data = Uri.parse("package:${context.packageName}")
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    }
+                    context.startActivity(manageIntent)
+                    Toast.makeText(
+                        context,
+                        "Please allow 'Install unknown apps' to complete update automatically",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return
+                }
+            }
+
             val apkUri: Uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
                 apkFile
             )
+
+            // Grant read URI permission to common package installer packages
+            val installerPackages = listOf(
+                "com.google.android.packageinstaller",
+                "com.android.packageinstaller"
+            )
+            for (pkg in installerPackages) {
+                try {
+                    context.grantUriPermission(pkg, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {}
+            }
 
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")

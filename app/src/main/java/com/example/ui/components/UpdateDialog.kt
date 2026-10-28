@@ -277,7 +277,7 @@ fun UpdateDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Downloading APK update...",
+                                    text = if (animatedProgress >= 0.99f) "Opening Package Installer..." else "Downloading APK update...",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.primary

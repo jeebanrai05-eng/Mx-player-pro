@@ -194,7 +194,12 @@ fun PlayerScreen(
 
     // Modes & HDR
     var currentAspectRatio by remember { mutableStateOf(VideoAspectRatio.FIT) }
-    var orientationMode by remember { mutableStateOf(ScreenOrientationMode.LANDSCAPE) }
+    val isInitiallyPortrait = remember(currentVideo) {
+        currentVideo.height > currentVideo.width && currentVideo.width > 0
+    }
+    var orientationMode by remember {
+        mutableStateOf(if (isInitiallyPortrait) ScreenOrientationMode.PORTRAIT else ScreenOrientationMode.LANDSCAPE)
+    }
     var isBackgroundAudioEnabled by remember { mutableStateOf(backgroundPlaybackDefault) }
     var sleepTimerMode by remember { mutableStateOf(SleepTimerMode.OFF) }
     var sleepTimerJob by remember { mutableStateOf<Job?>(null) }
@@ -217,9 +222,13 @@ fun PlayerScreen(
         }
     }
 
-    // Auto-rotate on video click, enable HDR10+ color mode & cleanup on exit
+    // Auto-rotate according to video dimension (portrait upright, landscape rotated), enable HDR & cleanup on exit
     DisposableEffect(Unit) {
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        activity?.requestedOrientation = if (isInitiallyPortrait) {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        }
         setFullscreen(true)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
@@ -229,7 +238,7 @@ fun PlayerScreen(
             }
         }
         onDispose {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             setFullscreen(false)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 try {
@@ -351,6 +360,16 @@ fun PlayerScreen(
         playbackErrorMessage = null
         val vid = videoList[currentVideoIndex]
         isFavorite = vid.isFavorite
+        if (vid.width > 0 && vid.height > 0) {
+            val isPortrait = vid.height > vid.width
+            val targetMode = if (isPortrait) ScreenOrientationMode.PORTRAIT else ScreenOrientationMode.LANDSCAPE
+            orientationMode = targetMode
+            activity?.requestedOrientation = if (isPortrait) {
+                ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            } else {
+                ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
+        }
         val uri = Uri.parse(vid.contentUriString)
         val mediaItem = MediaItem.fromUri(uri)
         exoPlayer.setMediaItem(mediaItem)
@@ -367,6 +386,21 @@ fun PlayerScreen(
     // Track listener & state polling
     DisposableEffect(exoPlayer) {
         val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                if (videoSize.width > 0 && videoSize.height > 0) {
+                    val isPortrait = videoSize.height > videoSize.width
+                    val targetMode = if (isPortrait) ScreenOrientationMode.PORTRAIT else ScreenOrientationMode.LANDSCAPE
+                    if (orientationMode != targetMode) {
+                        orientationMode = targetMode
+                        activity?.requestedOrientation = if (isPortrait) {
+                            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                        } else {
+                            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                        }
+                    }
+                }
+            }
+
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
                 if (playing) triggerControlsAutoHide()

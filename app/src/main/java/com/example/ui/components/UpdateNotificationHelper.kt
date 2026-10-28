@@ -63,17 +63,20 @@ object UpdateNotificationHelper {
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentTitle("🚀 Ultra Video Player Pro ${updateInfo.latestVersionName} Available!")
-            .setContentText("Tap to update: 120fps ultra-playback, real device delete, & private vault.")
+            .setContentText("Tap to update: Auto-rotation, Quick Play ▶️, and v${updateInfo.latestVersionName} features.")
             .setStyle(
                 NotificationCompat.BigTextStyle().bigText(
                     "Ultra Video Player Pro ${updateInfo.latestVersionName} is now ready!\n\n" +
-                    "• 120fps Smooth Display & Hardware Decoding\n" +
-                    "• 100% Device Storage Deletion (Scoped Storage)\n" +
-                    "• Genuine Private Vault Device Hiding\n" +
-                    "• In-App Self-Update system"
+                    updateInfo.releaseNotes.ifBlank {
+                        "• 🔄 Smart Video-Adaptive Rotation\n" +
+                        "• ▶️ Circular Quick-Play Action\n" +
+                        "• ⚡ Seamless Auto-Installer\n" +
+                        "• 🎛️ 10-Option Video Action Sheet"
+                    }
                 )
             )
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setAutoCancel(true)
             .setContentIntent(pendingIntent)

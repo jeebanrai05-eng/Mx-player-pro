@@ -1,9 +1,9 @@
 {
-  "versionName": "1.0.6",
-  "versionCode": 10,
-  "releaseTag": "v1.0.6",
-  "releaseTitle": "Ultra Video Player Pro v1.0.6",
-  "releaseNotes": "• 🎛️ Complete 10-Option Video Action Bottom Sheet: Modern modal with colorful professional icons for Favourite, Add To Playlist, File Transfer, Lock in Private Folder, Convert to MP3, Share, Rename, Cut, Properties, and Delete\n• 🔝 Top Bar & Down Bar Navigation: Unified TopAppBar with back/search/view-toggle and 5-tab Bottom Navigation (Home, Folders, My List, Private, Settings) across folder views and screens\n• 🛡️ Crash Fix in Favorites (My List): Resolved duplicate key exception when videos exist in both Favorites and Watch History\n• ⚪ Clean Modern White UI: Ultra-crisp background with high-contrast typography, duration thumbnail badges, and sleek overflow buttons\n• 🎦 Cinematic Video Player & HDR+: Glassmorphic dock bar, glowing electric blue seeker line, left vertical brightness HUD, right vertical volume HUD, and hardware-accelerated HDR/HDR10+ decoding",
-  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.6/app-release.apk",
+  "versionName": "1.0.7",
+  "versionCode": 11,
+  "releaseTag": "v1.0.7",
+  "releaseTitle": "Ultra Video Player Pro v1.0.7",
+  "releaseNotes": "• 🔄 Smart Video-Adaptive Rotation: Automatically opens portrait/vertical videos upright (Shorts, Reels, TikTok) and landscape/widescreen videos horizontally in full cinematic mode\n• ▶️ Circular Quick-Play Action: Replaced 'Open File' pill with a sleek glowing circular Play FAB that instantly resumes your most recent video with fluid animation\n• 🔔 Automatic Update Notifications: Reliable notification delivery with high priority and direct system prompts for upcoming releases\n• ⚡ Seamless Auto-Installer: Downloaded updates trigger the Android Package Installer automatically without manual file browsing\n• 🎛️ 10-Option Video Menu & White Clean UI: Full suite of tools (Favorite, Playlist, Vault, MP3, Share, Cut, Delete, Properties)",
+  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.7/app-release.apk",
   "sha256": ""
 }
