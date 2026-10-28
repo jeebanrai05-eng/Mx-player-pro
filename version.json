@@ -1,9 +1,9 @@
 {
-  "versionName": "1.0.5",
-  "versionCode": 9,
-  "releaseTag": "v1.0.5",
-  "releaseTitle": "Ultra Video Player Pro v1.0.5",
+  "versionName": "1.0.6",
+  "versionCode": 10,
+  "releaseTag": "v1.0.6",
+  "releaseTitle": "Ultra Video Player Pro v1.0.6",
   "releaseNotes": "• 🎛️ Complete 10-Option Video Action Bottom Sheet: Modern modal with colorful professional icons for Favourite, Add To Playlist, File Transfer, Lock in Private Folder, Convert to MP3, Share, Rename, Cut, Properties, and Delete\n• 🔝 Top Bar & Down Bar Navigation: Unified TopAppBar with back/search/view-toggle and 5-tab Bottom Navigation (Home, Folders, My List, Private, Settings) across folder views and screens\n• 🛡️ Crash Fix in Favorites (My List): Resolved duplicate key exception when videos exist in both Favorites and Watch History\n• ⚪ Clean Modern White UI: Ultra-crisp background with high-contrast typography, duration thumbnail badges, and sleek overflow buttons\n• 🎦 Cinematic Video Player & HDR+: Glassmorphic dock bar, glowing electric blue seeker line, left vertical brightness HUD, right vertical volume HUD, and hardware-accelerated HDR/HDR10+ decoding",
-  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.5/app-release.apk",
+  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.6/app-release.apk",
   "sha256": ""
 }

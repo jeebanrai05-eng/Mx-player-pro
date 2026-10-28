@@ -25,8 +25,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -36,6 +38,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Bookmark
@@ -160,7 +163,12 @@ fun LibraryScreen(
     var selectedVideoForInfo by remember { mutableStateOf<VideoItem?>(null) }
     var selectedVideoForOptions by remember { mutableStateOf<VideoItem?>(null) }
 
-    if (activeBottomNav != BottomNavTab.FOLDERS) {
+    if (isSearchActive) {
+        BackHandler {
+            isSearchActive = false
+            searchQuery = ""
+        }
+    } else if (activeBottomNav != BottomNavTab.FOLDERS) {
         BackHandler {
             activeBottomNav = BottomNavTab.FOLDERS
         }
@@ -233,31 +241,43 @@ fun LibraryScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(MaterialTheme.colorScheme.surface)
-                    .padding(bottom = 12.dp)
+                    .statusBarsPadding()
+                    .padding(bottom = 10.dp)
             ) {
                 // Top Action Bar matching reference image
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    if (isSearchActive) {
+                if (isSearchActive) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                isSearchActive = false
+                                searchQuery = ""
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Close search",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("Search videos or folders...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                            placeholder = { Text("Search videos or folders...", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp) },
                             singleLine = true,
                             leadingIcon = {
                                 Icon(Icons.Default.Search, contentDescription = null, tint = ProBlue)
                             },
                             trailingIcon = {
-                                IconButton(onClick = {
-                                    isSearchActive = false
-                                    searchQuery = ""
-                                }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Close search")
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = "Clear search", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
                                 }
                             },
                             colors = OutlinedTextFieldDefaults.colors(
@@ -268,11 +288,19 @@ fun LibraryScreen(
                             ),
                             shape = RoundedCornerShape(24.dp),
                             modifier = Modifier
-                                .fillMaxWidth()
+                                .weight(1f)
                                 .height(50.dp)
                                 .testTag("library_search_input")
                         )
-                    } else {
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
                         // Branding: Glowing Play Logo + "Ultra Player Pro"
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -492,6 +520,7 @@ fun LibraryScreen(
                 shadowElevation = 8.dp,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .navigationBarsPadding()
                     .border(
                         width = 1.dp,
                         color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
@@ -613,6 +642,20 @@ fun LibraryScreen(
                 .padding(innerPadding)
         ) {
             when {
+                // If search is active or searchQuery is typed
+                isSearchActive || searchQuery.isNotBlank() -> {
+                    SearchResultsContent(
+                        searchQuery = searchQuery,
+                        videos = filteredVideos,
+                        isGridView = userPreferences.isGridView,
+                        onVideoClick = { list, idx -> onVideoClick(list, idx) },
+                        onToggleFavorite = { vid -> coroutineScope.launch { repository.toggleFavorite(vid) } },
+                        onShowInfo = { vid -> selectedVideoForInfo = vid },
+                        onDeleteClick = { onDeleteRequested(it) },
+                        onLockToVault = { onLockToVaultRequested(it) },
+                        onOptionsClick = { selectedVideoForOptions = it }
+                    )
+                }
                 // If "Settings" is selected from bottom nav
                 activeBottomNav == BottomNavTab.SETTINGS -> {
                     SettingsScreen(
@@ -1090,6 +1133,119 @@ private fun MusicTabContent(
                             modifier = Modifier.size(20.dp)
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchResultsContent(
+    searchQuery: String,
+    videos: List<VideoItem>,
+    isGridView: Boolean,
+    onVideoClick: (List<VideoItem>, Int) -> Unit,
+    onToggleFavorite: (VideoItem) -> Unit,
+    onShowInfo: (VideoItem) -> Unit,
+    onDeleteClick: (VideoItem) -> Unit,
+    onLockToVault: (VideoItem) -> Unit,
+    onOptionsClick: (VideoItem) -> Unit
+) {
+    if (videos.isEmpty()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = if (searchQuery.isBlank()) "Type to search videos..." else "No videos found for '$searchQuery'",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Check spelling or try a different keyword",
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    } else {
+        if (isGridView) {
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 160.dp),
+                contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                    Text(
+                        text = "Search Results (${videos.size})",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+                items(videos.size, key = { "search_grid_${videos[it].id}" }) { index ->
+                    val video = videos[index]
+                    VideoCard(
+                        video = video,
+                        isGrid = true,
+                        onClick = { onVideoClick(videos, index) },
+                        onToggleFavorite = { onToggleFavorite(video) },
+                        onShowInfo = { onShowInfo(video) },
+                        onDeleteClick = { onDeleteClick(video) },
+                        onLockToVault = { onLockToVault(video) },
+                        onOptionsClick = { onOptionsClick(video) }
+                    )
+                }
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item {
+                    Text(
+                        text = "Search Results (${videos.size})",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+                items(videos.size, key = { "search_list_${videos[it].id}" }) { index ->
+                    val video = videos[index]
+                    VideoCard(
+                        video = video,
+                        isGrid = false,
+                        onClick = { onVideoClick(videos, index) },
+                        onToggleFavorite = { onToggleFavorite(video) },
+                        onShowInfo = { onShowInfo(video) },
+                        onDeleteClick = { onDeleteClick(video) },
+                        onLockToVault = { onLockToVault(video) },
+                        onOptionsClick = { onOptionsClick(video) }
+                    )
                 }
             }
         }
