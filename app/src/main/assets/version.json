@@ -1,9 +1,9 @@
 {
-  "versionName": "1.0.7",
-  "versionCode": 11,
-  "releaseTag": "v1.0.7",
-  "releaseTitle": "Ultra Video Player Pro v1.0.7",
-  "releaseNotes": "• 🔄 Smart Video-Adaptive Rotation: Automatically opens portrait/vertical videos upright (Shorts, Reels, TikTok) and landscape/widescreen videos horizontally in full cinematic mode\n• ▶️ Circular Quick-Play Action: Replaced 'Open File' pill with a sleek glowing circular Play FAB that instantly resumes your most recent video with fluid animation\n• 🔔 Automatic Update Notifications: Reliable notification delivery with high priority and direct system prompts for upcoming releases\n• ⚡ Seamless Auto-Installer: Downloaded updates trigger the Android Package Installer automatically without manual file browsing\n• 🎛️ 10-Option Video Menu & White Clean UI: Full suite of tools (Favorite, Playlist, Vault, MP3, Share, Cut, Delete, Properties)",
-  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.7/app-release.apk",
+  "versionName": "1.0.8",
+  "versionCode": 12,
+  "releaseTag": "v1.0.8",
+  "releaseTitle": "Ultra Video Player Pro v1.0.8",
+  "releaseNotes": "• 🎯 Multi-Selection Engine: Hold / long-press any video to select multiple items with instant checkmarks and Select All / Deselect All controls\n• 📁 Move & Copy to Folder + Create New Folder: Easily move or copy selected videos into existing folders or create brand new folders on device storage with one-tap Paste Here\n• 🗑️ Batch Actions Toolbar: Permanent delete, multi-video sharing, batch move into Private Vault (PIN locker), Favorite All, and combined storage properties calculation\n• 🔲 Enhanced Grid & List View: Modern card layout with responsive spacing, high-resolution thumbnail caching, duration badges, and smooth layout switching\n• ⚡ Seamless GitHub Auto-Updater: Automatic background check, direct download notification, and one-tap Package Installer integration",
+  "apkUrl": "https://github.com/jeebanrai05-eng/Mx-player-pro/releases/download/v1.0.8/app-release.apk",
   "sha256": ""
 }

@@ -1,8 +1,11 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,8 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Lock
@@ -53,12 +58,18 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.request.videoFrameMillis
 import com.example.data.model.VideoItem
+import com.example.ui.theme.ProBlue
 import com.example.ui.theme.StatusRed
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoCard(
     video: VideoItem,
     isGrid: Boolean = false,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShowInfo: () -> Unit,
@@ -71,6 +82,10 @@ fun VideoCard(
     if (isGrid) {
         VideoGridCard(
             video = video,
+            isSelectionMode = isSelectionMode,
+            isSelected = isSelected,
+            onToggleSelect = onToggleSelect,
+            onLongClick = onLongClick,
             onClick = onClick,
             onToggleFavorite = onToggleFavorite,
             onShowInfo = onShowInfo,
@@ -83,6 +98,10 @@ fun VideoCard(
     } else {
         VideoListCard(
             video = video,
+            isSelectionMode = isSelectionMode,
+            isSelected = isSelected,
+            onToggleSelect = onToggleSelect,
+            onLongClick = onLongClick,
             onClick = onClick,
             onToggleFavorite = onToggleFavorite,
             onShowInfo = onShowInfo,
@@ -95,9 +114,14 @@ fun VideoCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoListCard(
     video: VideoItem,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShowInfo: () -> Unit,
@@ -113,12 +137,29 @@ fun VideoListCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelect?.invoke()
+                    } else {
+                        onClick()
+                    }
+                },
+                onLongClick = {
+                    onLongClick?.invoke()
+                }
+            )
             .testTag("video_list_item_${video.id}"),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) ProBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) ProBlue else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 3.dp else 1.dp)
     ) {
         Row(
             modifier = Modifier
@@ -126,6 +167,32 @@ fun VideoListCard(
                 .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Selection checkbox indicator
+            if (isSelectionMode) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) ProBlue else Color.Transparent)
+                        .border(
+                            width = 2.dp,
+                            color = if (isSelected) ProBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isSelected) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Selected",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+
             // Thumbnail container
             Box(
                 modifier = Modifier
@@ -376,9 +443,14 @@ fun VideoListCard(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun VideoGridCard(
     video: VideoItem,
+    isSelectionMode: Boolean = false,
+    isSelected: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onShowInfo: () -> Unit,
@@ -394,12 +466,29 @@ fun VideoGridCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clip(RoundedCornerShape(16.dp))
+            .combinedClickable(
+                onClick = {
+                    if (isSelectionMode) {
+                        onToggleSelect?.invoke()
+                    } else {
+                        onClick()
+                    }
+                },
+                onLongClick = {
+                    onLongClick?.invoke()
+                }
+            )
             .testTag("video_grid_item_${video.id}"),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) ProBlue.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
+        ),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) ProBlue else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
     ) {
         Column {
             // Thumbnail container
@@ -441,19 +530,43 @@ fun VideoGridCard(
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .background(Color(0x99000000), RoundedCornerShape(14.dp))
-                            .clickable(onClick = onToggleFavorite),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = if (video.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                            contentDescription = "Favorite",
-                            tint = if (video.isFavorite) StatusRed else Color.White,
-                            modifier = Modifier.size(16.dp)
-                        )
+                    if (isSelectionMode) {
+                        Box(
+                            modifier = Modifier
+                                .size(26.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) ProBlue else Color(0x99000000))
+                                .border(
+                                    width = 2.dp,
+                                    color = if (isSelected) ProBlue else Color.White,
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Selected",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .background(Color(0x99000000), RoundedCornerShape(14.dp))
+                                .clickable(onClick = onToggleFavorite),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (video.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = "Favorite",
+                                tint = if (video.isFavorite) StatusRed else Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
 

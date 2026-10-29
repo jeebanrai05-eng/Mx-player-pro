@@ -27,6 +27,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import android.content.Intent
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
@@ -35,6 +40,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.AlertDialog
@@ -43,6 +49,9 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import com.example.ui.components.BatchTransferMode
+import com.example.ui.components.FolderPickerPasteDialog
+import com.example.ui.components.MultiSelectionBottomBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -98,12 +107,49 @@ fun FolderDetailScreen(
     onNavigateBack: () -> Unit,
     onOpenSettings: (() -> Unit)? = null
 ) {
-    BackHandler(onBack = onNavigateBack)
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
+
+    // Multi-Selection Engine States
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedVideoIds by remember { mutableStateOf(setOf<Long>()) }
+    var batchTransferMode by remember { mutableStateOf<BatchTransferMode?>(null) }
+    var showBatchDeleteConfirm by remember { mutableStateOf(false) }
+    var showBatchPropertiesDialog by remember { mutableStateOf(false) }
+
+    val exitSelectionMode: () -> Unit = {
+        isSelectionMode = false
+        selectedVideoIds = emptySet()
+    }
+
+    val toggleVideoSelection: (Long) -> Unit = { id ->
+        selectedVideoIds = if (selectedVideoIds.contains(id)) {
+            val next = selectedVideoIds - id
+            if (next.isEmpty()) isSelectionMode = false
+            next
+        } else {
+            selectedVideoIds + id
+        }
+    }
+
+    val startVideoSelection: (Long) -> Unit = { id ->
+        isSelectionMode = true
+        selectedVideoIds = selectedVideoIds + id
+    }
+
+    BackHandler {
+        if (isSelectionMode) {
+            exitSelectionMode()
+        } else if (isSearchActive) {
+            isSearchActive = false
+            searchQuery = ""
+        } else {
+            onNavigateBack()
+        }
+    }
 
     var selectedVideoForInfo by remember { mutableStateOf<VideoItem?>(null) }
     var selectedVideoForOptions by remember { mutableStateOf<VideoItem?>(null) }
@@ -115,6 +161,86 @@ fun FolderDetailScreen(
             videos
         } else {
             videos.filter { it.title.contains(searchQuery, ignoreCase = true) }
+        }
+    }
+
+    val selectedVideos = remember(videos, selectedVideoIds) {
+        videos.filter { selectedVideoIds.contains(it.id) }
+    }
+
+    val deleteRequestLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            Toast.makeText(context, "Deleted selected video(s)", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val onShareSelected: () -> Unit = {
+        if (selectedVideos.isNotEmpty()) {
+            val uris = ArrayList<Uri>()
+            selectedVideos.forEach { v ->
+                try {
+                    uris.add(Uri.parse(v.contentUriString))
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+            if (uris.size == 1) {
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "video/*"
+                    putExtra(Intent.EXTRA_STREAM, uris[0])
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Share video"))
+            } else if (uris.size > 1) {
+                val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = "video/*"
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Share ${uris.size} videos"))
+            }
+        }
+    }
+
+    val onBatchFavoriteToggle: () -> Unit = {
+        coroutineScope.launch {
+            selectedVideos.forEach { v ->
+                onToggleFavorite(v)
+            }
+            Toast.makeText(context, "Favorites updated for ${selectedVideos.size} videos", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val onBatchLockToVault: () -> Unit = {
+        coroutineScope.launch {
+            val isConfigured = repository.vaultManager.isPinConfigured()
+            if (!isConfigured) {
+                Toast.makeText(context, "Please set a 4-digit Vault PIN first", Toast.LENGTH_LONG).show()
+                onOpenPrivateVault()
+            } else {
+                val count = repository.batchLockToVault(selectedVideos)
+                Toast.makeText(context, "Moved $count videos to Private Vault", Toast.LENGTH_SHORT).show()
+                exitSelectionMode()
+            }
+        }
+    }
+
+    val onConfirmBatchDelete: () -> Unit = {
+        coroutineScope.launch {
+            val count = selectedVideos.size
+            val sender = repository.createBatchDeleteIntentSender(selectedVideos)
+            if (sender != null) {
+                deleteRequestLauncher.launch(
+                    IntentSenderRequest.Builder(sender).build()
+                )
+            } else {
+                val deleted = repository.deleteMultipleVideos(selectedVideos)
+                Toast.makeText(context, "Deleted $deleted videos", Toast.LENGTH_SHORT).show()
+            }
+            showBatchDeleteConfirm = false
+            exitSelectionMode()
         }
     }
 
@@ -144,7 +270,50 @@ fun FolderDetailScreen(
 
     Scaffold(
         topBar = {
-            if (isSearchActive) {
+            if (isSelectionMode) {
+                TopAppBar(
+                    modifier = Modifier.statusBarsPadding(),
+                    title = {
+                        Text(
+                            text = "${selectedVideoIds.size} Selected",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { exitSelectionMode() }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Exit selection",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    },
+                    actions = {
+                        val allSelected = displayedVideos.isNotEmpty() && selectedVideoIds.size >= displayedVideos.size
+                        IconButton(
+                            onClick = {
+                                if (allSelected) {
+                                    selectedVideoIds = emptySet()
+                                    isSelectionMode = false
+                                } else {
+                                    selectedVideoIds = displayedVideos.map { it.id }.toSet()
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SelectAll,
+                                contentDescription = if (allSelected) "Deselect All" else "Select All",
+                                tint = ProBlue
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    )
+                )
+            } else if (isSearchActive) {
                 TopAppBar(
                     modifier = Modifier.statusBarsPadding(),
                     title = {
@@ -242,19 +411,32 @@ fun FolderDetailScreen(
             }
         },
         bottomBar = {
-            // Down Bar (Bottom Navigation Bar) matching MX Player Pro
-            SurfaceBottomBar(
-                activeTab = FolderBottomTab.FOLDERS,
-                onTabClick = { tab ->
-                    when (tab) {
-                        FolderBottomTab.HOME -> onNavigateBack()
-                        FolderBottomTab.FOLDERS -> onNavigateBack()
-                        FolderBottomTab.MY_LIST -> onNavigateBack()
-                        FolderBottomTab.PRIVATE -> onOpenPrivateVault()
-                        FolderBottomTab.SETTINGS -> onOpenSettings?.invoke() ?: onNavigateBack()
+            if (isSelectionMode) {
+                MultiSelectionBottomBar(
+                    selectedCount = selectedVideoIds.size,
+                    onShare = { onShareSelected() },
+                    onMove = { batchTransferMode = BatchTransferMode.MOVE },
+                    onCopy = { batchTransferMode = BatchTransferMode.COPY },
+                    onLockToVault = { onBatchLockToVault() },
+                    onDelete = { showBatchDeleteConfirm = true },
+                    onToggleFavorite = { onBatchFavoriteToggle() },
+                    onShowProperties = { showBatchPropertiesDialog = true }
+                )
+            } else {
+                // Down Bar (Bottom Navigation Bar) matching MX Player Pro
+                SurfaceBottomBar(
+                    activeTab = FolderBottomTab.FOLDERS,
+                    onTabClick = { tab ->
+                        when (tab) {
+                            FolderBottomTab.HOME -> onNavigateBack()
+                            FolderBottomTab.FOLDERS -> onNavigateBack()
+                            FolderBottomTab.MY_LIST -> onNavigateBack()
+                            FolderBottomTab.PRIVATE -> onOpenPrivateVault()
+                            FolderBottomTab.SETTINGS -> onOpenSettings?.invoke() ?: onNavigateBack()
+                        }
                     }
-                }
-            )
+                )
+            }
         },
         containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
@@ -275,7 +457,17 @@ fun FolderDetailScreen(
                         VideoCard(
                             video = video,
                             isGrid = true,
-                            onClick = { onVideoClick(video) },
+                            isSelectionMode = isSelectionMode,
+                            isSelected = selectedVideoIds.contains(video.id),
+                            onToggleSelect = { toggleVideoSelection(video.id) },
+                            onLongClick = { startVideoSelection(video.id) },
+                            onClick = {
+                                if (isSelectionMode) {
+                                    toggleVideoSelection(video.id)
+                                } else {
+                                    onVideoClick(video)
+                                }
+                            },
                             onToggleFavorite = { onToggleFavorite(video) },
                             onShowInfo = { selectedVideoForInfo = video },
                             onDeleteClick = { onDeleteRequested(video) },
@@ -294,7 +486,17 @@ fun FolderDetailScreen(
                         VideoCard(
                             video = video,
                             isGrid = false,
-                            onClick = { onVideoClick(video) },
+                            isSelectionMode = isSelectionMode,
+                            isSelected = selectedVideoIds.contains(video.id),
+                            onToggleSelect = { toggleVideoSelection(video.id) },
+                            onLongClick = { startVideoSelection(video.id) },
+                            onClick = {
+                                if (isSelectionMode) {
+                                    toggleVideoSelection(video.id)
+                                } else {
+                                    onVideoClick(video)
+                                }
+                            },
                             onToggleFavorite = { onToggleFavorite(video) },
                             onShowInfo = { selectedVideoForInfo = video },
                             onDeleteClick = { onDeleteRequested(video) },
@@ -377,6 +579,100 @@ fun FolderDetailScreen(
                             }
                         ) {
                             Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            // Batch Folder Move / Copy Paste Dialog
+            batchTransferMode?.let { mode ->
+                FolderPickerPasteDialog(
+                    transferMode = mode,
+                    selectedCount = selectedVideos.size,
+                    availableFolders = repository.getAvailableFolders(videos),
+                    onConfirm = { targetFolderName ->
+                        coroutineScope.launch {
+                            val count = if (mode == BatchTransferMode.MOVE) {
+                                repository.batchMoveVideos(selectedVideos, targetFolderName)
+                            } else {
+                                repository.batchCopyVideos(selectedVideos, targetFolderName)
+                            }
+                            val action = if (mode == BatchTransferMode.MOVE) "Moved" else "Copied"
+                            Toast.makeText(context, "$action $count videos to '$targetFolderName'", Toast.LENGTH_SHORT).show()
+                            batchTransferMode = null
+                            exitSelectionMode()
+                        }
+                    },
+                    onDismiss = { batchTransferMode = null }
+                )
+            }
+
+            // Batch Delete Confirmation Dialog
+            if (showBatchDeleteConfirm && selectedVideos.isNotEmpty()) {
+                AlertDialog(
+                    onDismissRequest = { showBatchDeleteConfirm = false },
+                    title = {
+                        Text("Delete ${selectedVideos.size} Videos?", fontWeight = FontWeight.Bold)
+                    },
+                    text = {
+                        Text("Are you sure you want to permanently delete these ${selectedVideos.size} selected videos from your device storage? This action cannot be undone.")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { onConfirmBatchDelete() },
+                            colors = ButtonDefaults.buttonColors(containerColor = StatusRed)
+                        ) {
+                            Text("Delete", color = Color.White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showBatchDeleteConfirm = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            // Batch Properties Dialog
+            if (showBatchPropertiesDialog && selectedVideos.isNotEmpty()) {
+                val totalSize = selectedVideos.sumOf { it.size }
+                val totalDurationMs = selectedVideos.sumOf { it.duration }
+                val formattedSize = remember(totalSize) {
+                    val mb = totalSize.toDouble() / (1024 * 1024)
+                    if (mb >= 1024) {
+                        String.format("%.2f GB", mb / 1024)
+                    } else {
+                        String.format("%.1f MB", mb)
+                    }
+                }
+                val formattedDuration = remember(totalDurationMs) {
+                    val totalSecs = totalDurationMs / 1000
+                    val hrs = totalSecs / 3600
+                    val mins = (totalSecs % 3600) / 60
+                    val secs = totalSecs % 60
+                    if (hrs > 0) String.format("%02d:%02d:%02d", hrs, mins, secs)
+                    else String.format("%02d:%02d", mins, secs)
+                }
+
+                AlertDialog(
+                    onDismissRequest = { showBatchPropertiesDialog = false },
+                    title = {
+                        Text("Batch Selection Properties", fontWeight = FontWeight.Bold)
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Selected Items: ${selectedVideos.size} videos", fontWeight = FontWeight.Medium)
+                            Text("Total File Size: $formattedSize")
+                            Text("Total Playtime: $formattedDuration")
+                            Text("Folder: $folderName")
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { showBatchPropertiesDialog = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = ProBlue)
+                        ) {
+                            Text("OK", color = Color.White)
                         }
                     }
                 )

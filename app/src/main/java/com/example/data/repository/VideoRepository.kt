@@ -7,6 +7,7 @@ import android.database.Cursor
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -22,6 +23,8 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 class VideoRepository(private val context: Context) {
 
@@ -451,6 +454,135 @@ class VideoRepository(private val context: Context) {
 
         // Return false if Android OS confirmation (createDeleteRequest) is needed
         false
+    }
+
+    fun createBatchDeleteIntentSender(videos: List<VideoItem>): IntentSender? {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val mediaUris = videos.mapNotNull { video ->
+                    val uri = Uri.parse(video.contentUriString)
+                    if (uri.authority == MediaStore.AUTHORITY) {
+                        uri
+                    } else if (video.id > 0) {
+                        ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, video.id)
+                    } else null
+                }
+                if (mediaUris.isNotEmpty()) {
+                    MediaStore.createDeleteRequest(context.contentResolver, mediaUris).intentSender
+                } else null
+            } else null
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun deleteMultipleVideos(videos: List<VideoItem>): Int = withContext(Dispatchers.IO) {
+        var count = 0
+        for (video in videos) {
+            if (deleteVideo(video)) {
+                count++
+            }
+        }
+        requestRefresh()
+        count
+    }
+
+    fun getAvailableFolders(existingVideos: List<VideoItem>): List<String> {
+        val folderSet = linkedSetOf("Movies", "Download", "Camera", "Ultra Videos")
+        folderSet.addAll(existingVideos.map { it.folderName }.filter { it.isNotBlank() })
+        return folderSet.toList()
+    }
+
+    fun createNewFolder(folderName: String): File? {
+        val sanitized = folderName.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim()
+        if (sanitized.isEmpty()) return null
+        val baseDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+        val target = File(baseDir, sanitized)
+        if (!target.exists()) {
+            target.mkdirs()
+        }
+        return if (target.exists()) target else null
+    }
+
+    suspend fun copyVideoToFolder(video: VideoItem, targetFolderName: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val baseDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES)
+            val destDir = File(baseDir, targetFolderName)
+            if (!destDir.exists()) {
+                destDir.mkdirs()
+            }
+            val fileName = video.displayName.ifBlank { "video_${video.id}.mp4" }
+            var destFile = File(destDir, fileName)
+            if (destFile.exists()) {
+                val nameWithoutExt = fileName.substringBeforeLast(".")
+                val ext = fileName.substringAfterLast(".", "mp4")
+                destFile = File(destDir, "${nameWithoutExt}_copy_${System.currentTimeMillis() % 10000}.$ext")
+            }
+
+            val uri = Uri.parse(video.contentUriString)
+            val inputStream = if (video.path.isNotBlank() && File(video.path).exists()) {
+                FileInputStream(File(video.path))
+            } else {
+                context.contentResolver.openInputStream(uri)
+            }
+
+            if (inputStream != null) {
+                FileOutputStream(destFile).use { output ->
+                    inputStream.copyTo(output)
+                }
+                inputStream.close()
+                MediaScannerConnection.scanFile(context, arrayOf(destFile.absolutePath), arrayOf("video/*"), null)
+                requestRefresh()
+                return@withContext true
+            }
+            false
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    suspend fun moveVideoToFolder(video: VideoItem, targetFolderName: String): Boolean = withContext(Dispatchers.IO) {
+        val copied = copyVideoToFolder(video, targetFolderName)
+        if (copied) {
+            deleteVideo(video)
+            requestRefresh()
+            return@withContext true
+        }
+        false
+    }
+
+    suspend fun batchMoveVideos(videos: List<VideoItem>, targetFolderName: String): Int = withContext(Dispatchers.IO) {
+        var count = 0
+        for (v in videos) {
+            if (moveVideoToFolder(v, targetFolderName)) count++
+        }
+        requestRefresh()
+        count
+    }
+
+    suspend fun batchCopyVideos(videos: List<VideoItem>, targetFolderName: String): Int = withContext(Dispatchers.IO) {
+        var count = 0
+        for (v in videos) {
+            if (copyVideoToFolder(v, targetFolderName)) count++
+        }
+        requestRefresh()
+        count
+    }
+
+    suspend fun batchLockToVault(videos: List<VideoItem>): Int = withContext(Dispatchers.IO) {
+        var count = 0
+        for (v in videos) {
+            val res = vaultManager.lockVideo(v)
+            if (res.isSuccess) {
+                vaultManager.deleteOriginalMedia(v)
+                notifyVideoDeleted(v.contentUriString)
+                count++
+            }
+        }
+        requestRefresh()
+        count
     }
 
     fun notifyVideoDeleted(uriString: String) {

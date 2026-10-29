@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import android.app.Activity
+import android.content.Intent
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.widget.Toast
@@ -8,6 +9,10 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.SelectAll
+import com.example.ui.components.BatchTransferMode
+import com.example.ui.components.FolderPickerPasteDialog
+import com.example.ui.components.MultiSelectionBottomBar
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -170,7 +175,38 @@ fun LibraryScreen(
     var selectedVideoForInfo by remember { mutableStateOf<VideoItem?>(null) }
     var selectedVideoForOptions by remember { mutableStateOf<VideoItem?>(null) }
 
-    if (isSearchActive) {
+    // Multi-Selection Engine States
+    var isSelectionMode by remember { mutableStateOf(false) }
+    var selectedVideoIds by remember { mutableStateOf(setOf<Long>()) }
+    var batchTransferMode by remember { mutableStateOf<BatchTransferMode?>(null) }
+    var showBatchDeleteConfirm by remember { mutableStateOf(false) }
+    var showBatchPropertiesDialog by remember { mutableStateOf(false) }
+
+    val exitSelectionMode: () -> Unit = {
+        isSelectionMode = false
+        selectedVideoIds = emptySet()
+    }
+
+    val toggleVideoSelection: (Long) -> Unit = { id ->
+        selectedVideoIds = if (selectedVideoIds.contains(id)) {
+            val next = selectedVideoIds - id
+            if (next.isEmpty()) isSelectionMode = false
+            next
+        } else {
+            selectedVideoIds + id
+        }
+    }
+
+    val startVideoSelection: (Long) -> Unit = { id ->
+        isSelectionMode = true
+        selectedVideoIds = selectedVideoIds + id
+    }
+
+    if (isSelectionMode) {
+        BackHandler {
+            exitSelectionMode()
+        }
+    } else if (isSearchActive) {
         BackHandler {
             isSearchActive = false
             searchQuery = ""
@@ -188,6 +224,15 @@ fun LibraryScreen(
         if (uri != null) {
             val pickedVideo = repository.getVideoMetadataFromUri(uri)
             onVideoClick(listOf(pickedVideo), 0)
+        }
+    }
+
+    // Media IntentSender Launcher for scoped storage batch deletion
+    val deleteRequestLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            Toast.makeText(context, "Deleted selected video(s)", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -242,6 +287,78 @@ fun LibraryScreen(
     val favoriteVideos = remember(videos) { videos.filter { it.isFavorite } }
     val recentVideos = remember(videos) { videos.filter { it.lastPlayedTimestamp > 0 }.sortedByDescending { it.lastPlayedTimestamp } }
 
+    val selectedVideos = remember(videos, selectedVideoIds) {
+        videos.filter { selectedVideoIds.contains(it.id) }
+    }
+
+    val onShareSelected: () -> Unit = {
+        if (selectedVideos.isNotEmpty()) {
+            val uris = ArrayList<Uri>()
+            selectedVideos.forEach { v ->
+                try {
+                    uris.add(Uri.parse(v.contentUriString))
+                } catch (e: Exception) {
+                    // ignore
+                }
+            }
+            if (uris.size == 1) {
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "video/*"
+                    putExtra(Intent.EXTRA_STREAM, uris[0])
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Share video"))
+            } else if (uris.size > 1) {
+                val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = "video/*"
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(shareIntent, "Share ${uris.size} videos"))
+            }
+        }
+    }
+
+    val onBatchFavoriteToggle: () -> Unit = {
+        coroutineScope.launch {
+            selectedVideos.forEach { v ->
+                repository.toggleFavorite(v)
+            }
+            Toast.makeText(context, "Favorites updated for ${selectedVideos.size} videos", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val onBatchLockToVault: () -> Unit = {
+        coroutineScope.launch {
+            val isConfigured = repository.vaultManager.isPinConfigured()
+            if (!isConfigured) {
+                Toast.makeText(context, "Please set a 4-digit Vault PIN first", Toast.LENGTH_LONG).show()
+                onOpenPrivateVault()
+            } else {
+                val count = repository.batchLockToVault(selectedVideos)
+                Toast.makeText(context, "Moved $count videos to Private Vault", Toast.LENGTH_SHORT).show()
+                exitSelectionMode()
+            }
+        }
+    }
+
+    val onConfirmBatchDelete: () -> Unit = {
+        coroutineScope.launch {
+            val count = selectedVideos.size
+            val sender = repository.createBatchDeleteIntentSender(selectedVideos)
+            if (sender != null) {
+                deleteRequestLauncher.launch(
+                    IntentSenderRequest.Builder(sender).build()
+                )
+            } else {
+                val deleted = repository.deleteMultipleVideos(selectedVideos)
+                Toast.makeText(context, "Deleted $deleted videos", Toast.LENGTH_SHORT).show()
+            }
+            showBatchDeleteConfirm = false
+            exitSelectionMode()
+        }
+    }
+
     Scaffold(
         topBar = {
             Column(
@@ -251,8 +368,54 @@ fun LibraryScreen(
                     .statusBarsPadding()
                     .padding(bottom = 10.dp)
             ) {
-                // Top Action Bar matching reference image
-                if (isSearchActive) {
+                // Top Action Bar
+                if (isSelectionMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { exitSelectionMode() }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Exit selection mode",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${selectedVideoIds.size} Selected",
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val allVideosCount = filteredVideos.size
+                            val allSelected = allVideosCount > 0 && selectedVideoIds.size >= allVideosCount
+                            IconButton(
+                                onClick = {
+                                    if (allSelected) {
+                                        selectedVideoIds = emptySet()
+                                        isSelectionMode = false
+                                    } else {
+                                        selectedVideoIds = filteredVideos.map { it.id }.toSet()
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SelectAll,
+                                    contentDescription = if (allSelected) "Deselect All" else "Select All",
+                                    tint = ProBlue
+                                )
+                            }
+                        }
+                    }
+                } else if (isSearchActive) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -441,78 +604,80 @@ fun LibraryScreen(
                 }
 
                 // Horizontal Category Pills Row (Folders, All Videos, Music, Apps) - Exact match to reference image!
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TopPillTab.values().forEach { tab ->
-                        val isActive = activePillTab == tab
+                if (!isSelectionMode) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TopPillTab.values().forEach { tab ->
+                            val isActive = activePillTab == tab
 
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(22.dp))
-                                    .clickable {
-                                        activePillTab = tab
-                                        if (tab == TopPillTab.APPS) {
-                                            showExploreOnlineSheet = true
-                                        }
-                                    }
-                                    .then(
-                                        if (isActive) {
-                                            Modifier
-                                                .background(
-                                                    Brush.horizontalGradient(
-                                                        listOf(Color(0xFF0070F3), Color(0xFF0051CC))
-                                                    )
-                                                )
-                                                .shadow(elevation = 4.dp, shape = RoundedCornerShape(22.dp))
-                                        } else {
-                                            Modifier
-                                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                                .border(
-                                                    width = 1.dp,
-                                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
-                                                    shape = RoundedCornerShape(22.dp)
-                                                )
-                                        }
-                                    )
-                                    .padding(horizontal = 16.dp, vertical = 9.dp),
-                                contentAlignment = Alignment.Center
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = tab.icon,
-                                        contentDescription = tab.title,
-                                        tint = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                    Text(
-                                        text = tab.title,
-                                        color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 13.sp,
-                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
-                            }
-                            if (isActive) {
-                                Spacer(modifier = Modifier.height(4.dp))
                                 Box(
                                     modifier = Modifier
-                                        .width(22.dp)
-                                        .height(3.dp)
-                                        .clip(RoundedCornerShape(1.5.dp))
-                                        .background(ProBlue)
-                                )
+                                        .clip(RoundedCornerShape(22.dp))
+                                        .clickable {
+                                            activePillTab = tab
+                                            if (tab == TopPillTab.APPS) {
+                                                showExploreOnlineSheet = true
+                                            }
+                                        }
+                                        .then(
+                                            if (isActive) {
+                                                Modifier
+                                                    .background(
+                                                        Brush.horizontalGradient(
+                                                            listOf(Color(0xFF0070F3), Color(0xFF0051CC))
+                                                        )
+                                                    )
+                                                    .shadow(elevation = 4.dp, shape = RoundedCornerShape(22.dp))
+                                            } else {
+                                                Modifier
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                    .border(
+                                                        width = 1.dp,
+                                                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                                                        shape = RoundedCornerShape(22.dp)
+                                                    )
+                                            }
+                                        )
+                                        .padding(horizontal = 16.dp, vertical = 9.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = tab.icon,
+                                            contentDescription = tab.title,
+                                            tint = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                        Text(
+                                            text = tab.title,
+                                            color = if (isActive) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontSize = 13.sp,
+                                            fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    }
+                                }
+                                if (isActive) {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(22.dp)
+                                            .height(3.dp)
+                                            .clip(RoundedCornerShape(1.5.dp))
+                                            .background(ProBlue)
+                                    )
+                                }
                             }
                         }
                     }
@@ -520,77 +685,90 @@ fun LibraryScreen(
             }
         },
         bottomBar = {
-            // MX Player Pro styled Down Bar with active indicator line
-            androidx.compose.material3.Surface(
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-                shadowElevation = 8.dp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .border(
-                        width = 1.dp,
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-                    )
-            ) {
-                Row(
+            if (isSelectionMode) {
+                MultiSelectionBottomBar(
+                    selectedCount = selectedVideoIds.size,
+                    onShare = { onShareSelected() },
+                    onMove = { batchTransferMode = BatchTransferMode.MOVE },
+                    onCopy = { batchTransferMode = BatchTransferMode.COPY },
+                    onLockToVault = { onBatchLockToVault() },
+                    onDelete = { showBatchDeleteConfirm = true },
+                    onToggleFavorite = { onBatchFavoriteToggle() },
+                    onShowProperties = { showBatchPropertiesDialog = true }
+                )
+            } else {
+                // MX Player Pro styled Down Bar with active indicator line
+                androidx.compose.material3.Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 8.dp,
+                    shadowElevation = 8.dp,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp, horizontal = 8.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
+                        .navigationBarsPadding()
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                        )
                 ) {
-                    BottomNavTab.values().forEach { tab ->
-                        val isSelected = activeBottomNav == tab
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp, horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        BottomNavTab.values().forEach { tab ->
+                            val isSelected = activeBottomNav == tab
 
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable {
-                                    activeBottomNav = tab
-                                    when (tab) {
-                                        BottomNavTab.HOME -> activePillTab = TopPillTab.ALL_VIDEOS
-                                        BottomNavTab.FOLDERS -> activePillTab = TopPillTab.FOLDERS
-                                        BottomNavTab.MY_LIST -> Unit
-                                        BottomNavTab.PRIVATE -> {
-                                            onOpenPrivateVault()
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        activeBottomNav = tab
+                                        when (tab) {
+                                            BottomNavTab.HOME -> activePillTab = TopPillTab.ALL_VIDEOS
+                                            BottomNavTab.FOLDERS -> activePillTab = TopPillTab.FOLDERS
+                                            BottomNavTab.MY_LIST -> Unit
+                                            BottomNavTab.PRIVATE -> {
+                                                onOpenPrivateVault()
+                                            }
+                                            BottomNavTab.SETTINGS -> Unit
                                         }
-                                        BottomNavTab.SETTINGS -> Unit
                                     }
-                                }
-                                .padding(horizontal = 14.dp, vertical = 4.dp)
-                        ) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.title,
-                                tint = if (isSelected) ProBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                modifier = Modifier.size(23.dp)
-                            )
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Text(
-                                text = tab.title,
-                                fontSize = 11.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                color = if (isSelected) ProBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            if (isSelected) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(22.dp)
-                                        .height(3.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                listOf(Color(0xFF38BDF8), ProBlue)
-                                            )
-                                        )
+                                    .padding(horizontal = 14.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.title,
+                                    tint = if (isSelected) ProBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.size(23.dp)
                                 )
-                            } else {
                                 Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = tab.title,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) ProBlue else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                if (isSelected) {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(22.dp)
+                                            .height(3.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(
+                                                Brush.horizontalGradient(
+                                                    listOf(Color(0xFF38BDF8), ProBlue)
+                                                )
+                                            )
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                }
                             }
                         }
                     }
@@ -598,7 +776,7 @@ fun LibraryScreen(
             }
         },
         floatingActionButton = {
-            if (activeBottomNav != BottomNavTab.SETTINGS) {
+            if (!isSelectionMode && activeBottomNav != BottomNavTab.SETTINGS) {
                 // Determine target recent video (last played, or newest added)
                 val targetRecentVideo = remember(videos, recentVideos) {
                     recentVideos.firstOrNull() ?: videos.maxByOrNull { it.dateAdded } ?: videos.firstOrNull()
@@ -815,7 +993,17 @@ fun LibraryScreen(
                                 VideoCard(
                                     video = video,
                                     isGrid = true,
-                                    onClick = { onVideoClick(filteredVideos, index) },
+                                    isSelectionMode = isSelectionMode,
+                                    isSelected = selectedVideoIds.contains(video.id),
+                                    onToggleSelect = { toggleVideoSelection(video.id) },
+                                    onLongClick = { startVideoSelection(video.id) },
+                                    onClick = {
+                                        if (isSelectionMode) {
+                                            toggleVideoSelection(video.id)
+                                        } else {
+                                            onVideoClick(filteredVideos, index)
+                                        }
+                                    },
                                     onToggleFavorite = { coroutineScope.launch { repository.toggleFavorite(video) } },
                                     onShowInfo = { selectedVideoForInfo = video },
                                     onDeleteClick = { onDeleteRequested(video) },
@@ -835,7 +1023,17 @@ fun LibraryScreen(
                                 VideoCard(
                                     video = video,
                                     isGrid = false,
-                                    onClick = { onVideoClick(filteredVideos, index) },
+                                    isSelectionMode = isSelectionMode,
+                                    isSelected = selectedVideoIds.contains(video.id),
+                                    onToggleSelect = { toggleVideoSelection(video.id) },
+                                    onLongClick = { startVideoSelection(video.id) },
+                                    onClick = {
+                                        if (isSelectionMode) {
+                                            toggleVideoSelection(video.id)
+                                        } else {
+                                            onVideoClick(filteredVideos, index)
+                                        }
+                                    },
                                     onToggleFavorite = { coroutineScope.launch { repository.toggleFavorite(video) } },
                                     onShowInfo = { selectedVideoForInfo = video },
                                     onDeleteClick = { onDeleteRequested(video) },
@@ -972,6 +1170,100 @@ fun LibraryScreen(
                     onRenameVideo = { newTitle ->
                         val v = selectedVideoForOptions ?: return@VideoOptionsBottomSheet
                         coroutineScope.launch { repository.renameVideo(v, newTitle) }
+                    }
+                )
+            }
+
+            // Batch Folder Move / Copy Paste Dialog
+            batchTransferMode?.let { mode ->
+                FolderPickerPasteDialog(
+                    transferMode = mode,
+                    selectedCount = selectedVideos.size,
+                    availableFolders = repository.getAvailableFolders(videos),
+                    onConfirm = { targetFolderName ->
+                        coroutineScope.launch {
+                            val count = if (mode == BatchTransferMode.MOVE) {
+                                repository.batchMoveVideos(selectedVideos, targetFolderName)
+                            } else {
+                                repository.batchCopyVideos(selectedVideos, targetFolderName)
+                            }
+                            val action = if (mode == BatchTransferMode.MOVE) "Moved" else "Copied"
+                            Toast.makeText(context, "$action $count videos to '$targetFolderName'", Toast.LENGTH_SHORT).show()
+                            batchTransferMode = null
+                            exitSelectionMode()
+                        }
+                    },
+                    onDismiss = { batchTransferMode = null }
+                )
+            }
+
+            // Batch Delete Confirmation Dialog
+            if (showBatchDeleteConfirm && selectedVideos.isNotEmpty()) {
+                AlertDialog(
+                    onDismissRequest = { showBatchDeleteConfirm = false },
+                    title = {
+                        Text("Delete ${selectedVideos.size} Videos?", fontWeight = FontWeight.Bold)
+                    },
+                    text = {
+                        Text("Are you sure you want to permanently delete these ${selectedVideos.size} selected videos from your device storage? This action cannot be undone.")
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { onConfirmBatchDelete() },
+                            colors = ButtonDefaults.buttonColors(containerColor = StatusRed)
+                        ) {
+                            Text("Delete", color = Color.White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showBatchDeleteConfirm = false }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            // Batch Properties Dialog
+            if (showBatchPropertiesDialog && selectedVideos.isNotEmpty()) {
+                val totalSize = selectedVideos.sumOf { it.size }
+                val totalDurationMs = selectedVideos.sumOf { it.duration }
+                val formattedSize = remember(totalSize) {
+                    val mb = totalSize.toDouble() / (1024 * 1024)
+                    if (mb >= 1024) {
+                        String.format("%.2f GB", mb / 1024)
+                    } else {
+                        String.format("%.1f MB", mb)
+                    }
+                }
+                val formattedDuration = remember(totalDurationMs) {
+                    val totalSecs = totalDurationMs / 1000
+                    val hrs = totalSecs / 3600
+                    val mins = (totalSecs % 3600) / 60
+                    val secs = totalSecs % 60
+                    if (hrs > 0) String.format("%02d:%02d:%02d", hrs, mins, secs)
+                    else String.format("%02d:%02d", mins, secs)
+                }
+
+                AlertDialog(
+                    onDismissRequest = { showBatchPropertiesDialog = false },
+                    title = {
+                        Text("Batch Selection Properties", fontWeight = FontWeight.Bold)
+                    },
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Selected Items: ${selectedVideos.size} videos", fontWeight = FontWeight.Medium)
+                            Text("Total File Size: $formattedSize")
+                            Text("Total Playtime: $formattedDuration")
+                            Text("Storage Type: Internal / External Media")
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = { showBatchPropertiesDialog = false },
+                            colors = ButtonDefaults.buttonColors(containerColor = ProBlue)
+                        ) {
+                            Text("OK", color = Color.White)
+                        }
                     }
                 )
             }
